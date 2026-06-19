@@ -35,10 +35,18 @@ public class Main {
 
                 String dirName = input.substring(3);
 
-                File dir = new File(dirName);
+                Path newPath;
 
-                if (dir.exists() && dir.isDirectory()) {
-                    currentDirectory = dir.toPath().toAbsolutePath().normalize();
+                if (dirName.startsWith("/")) {
+                    newPath = Path.of(dirName);
+                } else {
+                    newPath = currentDirectory.resolve(dirName);
+                }
+
+                newPath = newPath.normalize();
+
+                if (newPath.toFile().exists() && newPath.toFile().isDirectory()) {
+                    currentDirectory = newPath;
                 } else {
                     System.out.println("cd: " + dirName + ": No such file or directory");
                 }
