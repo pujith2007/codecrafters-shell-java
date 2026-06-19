@@ -154,16 +154,23 @@ public class Main {
         StringBuilder current = new StringBuilder();
 
         boolean inSingleQuotes = false;
+        boolean inDoubleQuotes = false;
 
         for (int i = 0; i < input.length(); i++) {
 
             char c = input.charAt(i);
 
-            if (c == '\'') {
+            if (c == '\'' && !inDoubleQuotes) {
 
                 inSingleQuotes = !inSingleQuotes;
 
-            } else if (Character.isWhitespace(c) && !inSingleQuotes) {
+            } else if (c == '"' && !inSingleQuotes) {
+
+                inDoubleQuotes = !inDoubleQuotes;
+
+            } else if (Character.isWhitespace(c)
+                    && !inSingleQuotes
+                    && !inDoubleQuotes) {
 
                 if (current.length() > 0) {
                     args.add(current.toString());
