@@ -1,5 +1,7 @@
 import java.util.Scanner;
 import java.util.Set;
+import java.util.List;
+import java.util.ArrayList;
 import java.io.File;
 import java.nio.file.Path;
 
@@ -24,7 +26,19 @@ public class Main {
             }
 
             else if (input.startsWith("echo ")) {
-                System.out.println(input.substring(5));
+
+                List<String> parsed = parseCommand(input);
+
+                for (int i = 1; i < parsed.size(); i++) {
+
+                    if (i > 1) {
+                        System.out.print(" ");
+                    }
+
+                    System.out.print(parsed.get(i));
+                }
+
+                System.out.println();
             }
 
             else if (input.equals("pwd")) {
@@ -93,8 +107,11 @@ public class Main {
 
             else {
 
-                String[] parts = input.split(" ");
-                String command = parts[0];
+                List<String> parsed = parseCommand(input);
+
+                String command = parsed.get(0);
+
+                String[] parts = parsed.toArray(new String[0]);
 
                 String path = System.getenv("PATH");
                 String[] dirs = path.split(File.pathSeparator);
@@ -128,5 +145,41 @@ public class Main {
                 }
             }
         }
+    }
+
+    private static List<String> parseCommand(String input) {
+
+        List<String> args = new ArrayList<>();
+
+        StringBuilder current = new StringBuilder();
+
+        boolean inSingleQuotes = false;
+
+        for (int i = 0; i < input.length(); i++) {
+
+            char c = input.charAt(i);
+
+            if (c == '\'') {
+
+                inSingleQuotes = !inSingleQuotes;
+
+            } else if (Character.isWhitespace(c) && !inSingleQuotes) {
+
+                if (current.length() > 0) {
+                    args.add(current.toString());
+                    current.setLength(0);
+                }
+
+            } else {
+
+                current.append(c);
+            }
+        }
+
+        if (current.length() > 0) {
+            args.add(current.toString());
+        }
+
+        return args;
     }
 }
