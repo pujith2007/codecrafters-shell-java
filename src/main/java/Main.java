@@ -150,7 +150,6 @@ public class Main {
    private static List<String> parseCommand(String input) {
 
     List<String> args = new ArrayList<>();
-
     StringBuilder current = new StringBuilder();
 
     boolean inSingleQuotes = false;
@@ -160,33 +159,79 @@ public class Main {
 
         char c = input.charAt(i);
 
-        if (c == '\\' && !inSingleQuotes && !inDoubleQuotes) {
+        // Inside single quotes: everything is literal
+        if (inSingleQuotes) {
 
-            if (i + 1 < input.length()) {
-                current.append(input.charAt(i + 1));
-                i++;
+            if (c == '\'') {
+                inSingleQuotes = false;
+            } else {
+                current.append(c);
             }
 
-        } else if (c == '\'' && !inDoubleQuotes) {
+        }
 
-            inSingleQuotes = !inSingleQuotes;
+        // Inside double quotes
+        else if (inDoubleQuotes) {
 
-        } else if (c == '"' && !inSingleQuotes) {
+            if (c == '\\') {
 
-            inDoubleQuotes = !inDoubleQuotes;
+                if (i + 1 < input.length()) {
 
-        } else if (Character.isWhitespace(c)
-                && !inSingleQuotes
-                && !inDoubleQuotes) {
+                    char next = input.charAt(i + 1);
 
-            if (current.length() > 0) {
-                args.add(current.toString());
-                current.setLength(0);
+                    // Only " and \ are escaped in this stage
+                    if (next == '"' || next == '\\') {
+                        current.append(next);
+                        i++;
+                    } else {
+                        current.append('\\');
+                        current.append(next);
+                        i++;
+                    }
+                } else {
+                    current.append('\\');
+                }
+
+            } else if (c == '"') {
+
+                inDoubleQuotes = false;
+
+            } else {
+
+                current.append(c);
             }
 
-        } else {
+        }
 
-            current.append(c);
+        // Outside quotes
+        else {
+
+            if (c == '\\') {
+
+                if (i + 1 < input.length()) {
+                    current.append(input.charAt(i + 1));
+                    i++;
+                }
+
+            } else if (c == '\'') {
+
+                inSingleQuotes = true;
+
+            } else if (c == '"') {
+
+                inDoubleQuotes = true;
+
+            } else if (Character.isWhitespace(c)) {
+
+                if (current.length() > 0) {
+                    args.add(current.toString());
+                    current.setLength(0);
+                }
+
+            } else {
+
+                current.append(c);
+            }
         }
     }
 
@@ -196,4 +241,5 @@ public class Main {
 
     return args;
 }
-    }
+}
+    
