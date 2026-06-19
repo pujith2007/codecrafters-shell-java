@@ -1,6 +1,7 @@
 import java.util.Scanner;
 import java.util.Set;
 import java.io.File;
+import java.nio.file.Path;
 
 public class Main {
 
@@ -8,7 +9,9 @@ public class Main {
 
         Scanner scanner = new Scanner(System.in);
 
-        Set<String> builtins = Set.of("echo", "exit", "type", "pwd");
+        Set<String> builtins = Set.of("echo", "exit", "type", "pwd", "cd");
+
+        Path currentDirectory = Path.of(System.getProperty("user.dir"));
 
         while (true) {
 
@@ -25,7 +28,20 @@ public class Main {
             }
 
             else if (input.equals("pwd")) {
-                System.out.println(System.getProperty("user.dir"));
+                System.out.println(currentDirectory.toAbsolutePath());
+            }
+
+            else if (input.startsWith("cd ")) {
+
+                String dirName = input.substring(3);
+
+                File dir = new File(dirName);
+
+                if (dir.exists() && dir.isDirectory()) {
+                    currentDirectory = dir.toPath().toAbsolutePath().normalize();
+                } else {
+                    System.out.println("cd: " + dirName + ": No such file or directory");
+                }
             }
 
             else if (input.startsWith("type ")) {
@@ -81,6 +97,8 @@ public class Main {
                 if (executable != null) {
 
                     ProcessBuilder pb = new ProcessBuilder(parts);
+
+                    pb.directory(currentDirectory.toFile());
 
                     pb.inheritIO();
 
