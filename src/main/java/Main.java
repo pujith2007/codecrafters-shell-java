@@ -37,9 +37,16 @@ public class Main {
 
                 Path newPath;
 
-                if (dirName.startsWith("/")) {
+                if (dirName.equals("~")) {
+
+                    newPath = Path.of(System.getenv("HOME"));
+
+                } else if (dirName.startsWith("/")) {
+
                     newPath = Path.of(dirName);
+
                 } else {
+
                     newPath = currentDirectory.resolve(dirName);
                 }
 
@@ -57,7 +64,9 @@ public class Main {
                 String command = input.substring(5);
 
                 if (builtins.contains(command)) {
+
                     System.out.println(command + " is a shell builtin");
+
                 } else {
 
                     String path = System.getenv("PATH");
