@@ -8,7 +8,7 @@ public class Main {
 
         Scanner scanner = new Scanner(System.in);
 
-        Set<String> builtins = Set.of("echo", "exit", "type");
+        Set<String> builtins = Set.of("echo", "exit", "type", "pwd");
 
         while (true) {
 
@@ -22,6 +22,10 @@ public class Main {
 
             else if (input.startsWith("echo ")) {
                 System.out.println(input.substring(5));
+            }
+
+            else if (input.equals("pwd")) {
+                System.out.println(System.getProperty("user.dir"));
             }
 
             else if (input.startsWith("type ")) {
