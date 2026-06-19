@@ -76,8 +76,6 @@ public class Main {
 
                 if (executable != null) {
 
-                    parts[0] = executable.getAbsolutePath();
-
                     ProcessBuilder pb = new ProcessBuilder(parts);
 
                     pb.inheritIO();
