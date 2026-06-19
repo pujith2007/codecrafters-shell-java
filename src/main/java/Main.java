@@ -35,7 +35,9 @@ public class Main {
                 for (int i = 0; i < parsed.size(); i++) {
                     if (parsed.get(i).equals(">")
                             || parsed.get(i).equals("1>")
-                            || parsed.get(i).equals("2>")) {
+                            || parsed.get(i).equals("2>")
+                            || parsed.get(i).equals(">>")
+                            || parsed.get(i).equals("1>>")) {
                         redirectIndex = i;
                         break;
                     }
@@ -55,19 +57,25 @@ public class Main {
                     String operator = parsed.get(redirectIndex);
                     String fileName = parsed.get(redirectIndex + 1);
 
+                    Path filePath = Path.of(fileName);
+                    Files.createDirectories(filePath.toAbsolutePath().getParent());
+
                     if (operator.equals("2>")) {
 
-                        Files.createDirectories(Path.of(fileName).toAbsolutePath().getParent());
-                        Files.writeString(Path.of(fileName), "");
+                        Files.writeString(filePath, "");
                         System.out.println(output);
 
-                    } else {
+                    } else if (operator.equals(">") || operator.equals("1>")) {
 
-                        Files.createDirectories(Path.of(fileName).toAbsolutePath().getParent());
-                        Files.writeString(
-                                Path.of(fileName),
-                                output.toString() + System.lineSeparator()
-                        );
+                        Files.writeString(filePath,
+                                output.toString() + System.lineSeparator());
+
+                    } else if (operator.equals(">>") || operator.equals("1>>")) {
+
+                        Files.writeString(filePath,
+                                output.toString() + System.lineSeparator(),
+                                java.nio.file.StandardOpenOption.CREATE,
+                                java.nio.file.StandardOpenOption.APPEND);
                     }
 
                 } else {
@@ -75,7 +83,7 @@ public class Main {
                     System.out.println(output);
                 }
 
-            } // ✅ echo block ends here
+            } // echo ends
 
             else if (input.equals("pwd")) {
 
@@ -145,7 +153,9 @@ public class Main {
                 for (int i = 0; i < parsed.size(); i++) {
                     if (parsed.get(i).equals(">")
                             || parsed.get(i).equals("1>")
-                            || parsed.get(i).equals("2>")) {
+                            || parsed.get(i).equals("2>")
+                            || parsed.get(i).equals(">>")
+                            || parsed.get(i).equals("1>>")) {
                         redirectIndex = i;
                         break;
                     }
@@ -163,10 +173,10 @@ public class Main {
                 String command = commandArgs.get(0);
                 String[] parts = commandArgs.toArray(new String[0]);
 
+                File executable = null;
+
                 String path = System.getenv("PATH");
                 String[] dirs = path.split(File.pathSeparator);
-
-                File executable = null;
 
                 for (String dir : dirs) {
                     File file = new File(dir, command);
@@ -186,14 +196,21 @@ public class Main {
                         String operator = parsed.get(redirectIndex);
                         String fileName = parsed.get(redirectIndex + 1);
 
+                        File outFile = new File(fileName);
+
                         if (operator.equals("2>")) {
 
-                            pb.redirectError(new File(fileName));
+                            pb.redirectError(outFile);
                             pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
 
-                        } else {
+                        } else if (operator.equals(">") || operator.equals("1>")) {
 
-                            pb.redirectOutput(new File(fileName));
+                            pb.redirectOutput(outFile);
+                            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                        } else if (operator.equals(">>") || operator.equals("1>>")) {
+
+                            pb.redirectOutput(ProcessBuilder.Redirect.appendTo(outFile));
                             pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                         }
 
@@ -271,23 +288,26 @@ public class Main {
 
                 } else if (c == '>') {
 
+                    boolean append = (i + 1 < input.length() && input.charAt(i + 1) == '>');
+                    if (append) i++;
+
                     if (current.length() > 0) {
 
                         String token = current.toString();
 
                         if (token.equals("1")) {
-                            args.add("1>");
+                            args.add(append ? "1>>" : "1>");
                         } else if (token.equals("2")) {
                             args.add("2>");
                         } else {
                             args.add(token);
-                            args.add(">");
+                            args.add(append ? ">>" : ">");
                         }
 
                         current.setLength(0);
 
                     } else {
-                        args.add(">");
+                        args.add(append ? ">>" : ">");
                     }
 
                 } else if (Character.isWhitespace(c)) {
