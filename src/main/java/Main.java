@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.io.File;
 import java.nio.file.Path;
+import java.nio.file.Files;
 
 public class Main {
 
@@ -29,20 +30,46 @@ public class Main {
 
                 List<String> parsed = parseCommand(input);
 
-                for (int i = 1; i < parsed.size(); i++) {
+                int redirectIndex = -1;
 
-                    if (i > 1) {
-                        System.out.print(" ");
+                for (int i = 0; i < parsed.size(); i++) {
+                    if (parsed.get(i).equals(">") || parsed.get(i).equals("1>")) {
+                        redirectIndex = i;
+                        break;
                     }
-
-                    System.out.print(parsed.get(i));
                 }
 
-                System.out.println();
+                StringBuilder output = new StringBuilder();
+
+                int end = (redirectIndex == -1) ? parsed.size() : redirectIndex;
+
+                for (int i = 1; i < end; i++) {
+
+                    if (i > 1) {
+                        output.append(" ");
+                    }
+
+                    output.append(parsed.get(i));
+                }
+
+                if (redirectIndex != -1) {
+
+                    String fileName = parsed.get(redirectIndex + 1);
+
+                    Files.writeString(
+                            Path.of(fileName),
+                            output.toString() + System.lineSeparator());
+
+                } else {
+
+                    System.out.println(output);
+                }
             }
 
             else if (input.equals("pwd")) {
+
                 System.out.println(currentDirectory.toAbsolutePath());
+
             }
 
             else if (input.startsWith("cd ")) {
@@ -67,8 +94,11 @@ public class Main {
                 newPath = newPath.normalize();
 
                 if (newPath.toFile().exists() && newPath.toFile().isDirectory()) {
+
                     currentDirectory = newPath;
+
                 } else {
+
                     System.out.println("cd: " + dirName + ": No such file or directory");
                 }
             }
@@ -93,6 +123,7 @@ public class Main {
                         File file = new File(dir, command);
 
                         if (file.exists() && file.canExecute()) {
+
                             System.out.println(command + " is " + file.getAbsolutePath());
                             found = true;
                             break;
@@ -100,6 +131,7 @@ public class Main {
                     }
 
                     if (!found) {
+
                         System.out.println(command + ": not found");
                     }
                 }
@@ -109,9 +141,35 @@ public class Main {
 
                 List<String> parsed = parseCommand(input);
 
-                String command = parsed.get(0);
+                int redirectIndex = -1;
 
-                String[] parts = parsed.toArray(new String[0]);
+                for (int i = 0; i < parsed.size(); i++) {
+
+                    if (parsed.get(i).equals(">") || parsed.get(i).equals("1>")) {
+
+                        redirectIndex = i;
+                        break;
+                    }
+                }
+
+                List<String> commandArgs = new ArrayList<>();
+
+                for (int i = 0; i < parsed.size(); i++) {
+
+                    if (i == redirectIndex) {
+                        break;
+                    }
+
+                    commandArgs.add(parsed.get(i));
+                }
+
+                if (commandArgs.isEmpty()) {
+                    continue;
+                }
+
+                String command = commandArgs.get(0);
+
+                String[] parts = commandArgs.toArray(new String[0]);
 
                 String path = System.getenv("PATH");
                 String[] dirs = path.split(File.pathSeparator);
@@ -123,6 +181,7 @@ public class Main {
                     File file = new File(dir, command);
 
                     if (file.exists() && file.canExecute()) {
+
                         executable = file;
                         break;
                     }
@@ -134,112 +193,149 @@ public class Main {
 
                     pb.directory(currentDirectory.toFile());
 
-                    pb.inheritIO();
+                    if (redirectIndex != -1) {
+
+                        String fileName = parsed.get(redirectIndex + 1);
+
+                        pb.redirectOutput(new File(fileName));
+                        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                    } else {
+
+                        pb.inheritIO();
+                    }
 
                     Process process = pb.start();
-
                     process.waitFor();
 
                 } else {
+
                     System.out.println(command + ": command not found");
                 }
             }
         }
     }
 
-   private static List<String> parseCommand(String input) {
+    private static List<String> parseCommand(String input) {
 
-    List<String> args = new ArrayList<>();
-    StringBuilder current = new StringBuilder();
+        List<String> args = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
 
-    boolean inSingleQuotes = false;
-    boolean inDoubleQuotes = false;
+        boolean inSingleQuotes = false;
+        boolean inDoubleQuotes = false;
 
-    for (int i = 0; i < input.length(); i++) {
+        for (int i = 0; i < input.length(); i++) {
 
-        char c = input.charAt(i);
+            char c = input.charAt(i);
 
-        // Inside single quotes: everything is literal
-        if (inSingleQuotes) {
+            if (inSingleQuotes) {
 
-            if (c == '\'') {
-                inSingleQuotes = false;
-            } else {
-                current.append(c);
+                if (c == '\'') {
+
+                    inSingleQuotes = false;
+
+                } else {
+
+                    current.append(c);
+                }
             }
 
-        }
+            else if (inDoubleQuotes) {
 
-        // Inside double quotes
-        else if (inDoubleQuotes) {
+                if (c == '\\') {
 
-            if (c == '\\') {
+                    if (i + 1 < input.length()) {
 
-                if (i + 1 < input.length()) {
+                        char next = input.charAt(i + 1);
 
-                    char next = input.charAt(i + 1);
+                        if (next == '"' || next == '\\') {
 
-                    // Only " and \ are escaped in this stage
-                    if (next == '"' || next == '\\') {
-                        current.append(next);
-                        i++;
+                            current.append(next);
+                            i++;
+
+                        } else {
+
+                            current.append('\\');
+                            current.append(next);
+                            i++;
+                        }
+
                     } else {
+
                         current.append('\\');
-                        current.append(next);
+                    }
+
+                } else if (c == '"') {
+
+                    inDoubleQuotes = false;
+
+                } else {
+
+                    current.append(c);
+                }
+            }
+
+            else {
+
+                if (c == '\\') {
+
+                    if (i + 1 < input.length()) {
+
+                        current.append(input.charAt(i + 1));
                         i++;
                     }
+
+                } else if (c == '\'') {
+
+                    inSingleQuotes = true;
+
+                } else if (c == '"') {
+
+                    inDoubleQuotes = true;
+
+                } else if (c == '>') {
+
+                    if (current.length() > 0) {
+
+                        String token = current.toString();
+
+                        if (token.equals("1")) {
+
+                            args.add("1>");
+
+                        } else {
+
+                            args.add(token);
+                            args.add(">");
+                        }
+
+                        current.setLength(0);
+
+                    } else {
+
+                        args.add(">");
+                    }
+
+                } else if (Character.isWhitespace(c)) {
+
+                    if (current.length() > 0) {
+
+                        args.add(current.toString());
+                        current.setLength(0);
+                    }
+
                 } else {
-                    current.append('\\');
+
+                    current.append(c);
                 }
-
-            } else if (c == '"') {
-
-                inDoubleQuotes = false;
-
-            } else {
-
-                current.append(c);
-            }
-
-        }
-
-        // Outside quotes
-        else {
-
-            if (c == '\\') {
-
-                if (i + 1 < input.length()) {
-                    current.append(input.charAt(i + 1));
-                    i++;
-                }
-
-            } else if (c == '\'') {
-
-                inSingleQuotes = true;
-
-            } else if (c == '"') {
-
-                inDoubleQuotes = true;
-
-            } else if (Character.isWhitespace(c)) {
-
-                if (current.length() > 0) {
-                    args.add(current.toString());
-                    current.setLength(0);
-                }
-
-            } else {
-
-                current.append(c);
             }
         }
-    }
 
-    if (current.length() > 0) {
-        args.add(current.toString());
-    }
+        if (current.length() > 0) {
 
-    return args;
+            args.add(current.toString());
+        }
+
+        return args;
+    }
 }
-}
-    
