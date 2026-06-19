@@ -3,12 +3,15 @@ import java.util.Set;
 import java.io.File;
 
 public class Main {
+
     public static void main(String[] args) throws Exception {
 
         Scanner scanner = new Scanner(System.in);
+
         Set<String> builtins = Set.of("echo", "exit", "type");
 
         while (true) {
+
             System.out.print("$ ");
 
             String input = scanner.nextLine();
@@ -22,6 +25,7 @@ public class Main {
             }
 
             else if (input.startsWith("type ")) {
+
                 String command = input.substring(5);
 
                 if (builtins.contains(command)) {
@@ -34,6 +38,7 @@ public class Main {
                     boolean found = false;
 
                     for (String dir : dirs) {
+
                         File file = new File(dir, command);
 
                         if (file.exists() && file.canExecute()) {
@@ -50,7 +55,40 @@ public class Main {
             }
 
             else {
-                System.out.println(input + ": command not found");
+
+                String[] parts = input.split(" ");
+                String command = parts[0];
+
+                String path = System.getenv("PATH");
+                String[] dirs = path.split(File.pathSeparator);
+
+                File executable = null;
+
+                for (String dir : dirs) {
+
+                    File file = new File(dir, command);
+
+                    if (file.exists() && file.canExecute()) {
+                        executable = file;
+                        break;
+                    }
+                }
+
+                if (executable != null) {
+
+                    parts[0] = executable.getAbsolutePath();
+
+                    ProcessBuilder pb = new ProcessBuilder(parts);
+
+                    pb.inheritIO();
+
+                    Process process = pb.start();
+
+                    process.waitFor();
+
+                } else {
+                    System.out.println(command + ": command not found");
+                }
             }
         }
     }
