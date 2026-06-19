@@ -33,7 +33,9 @@ public class Main {
                 int redirectIndex = -1;
 
                 for (int i = 0; i < parsed.size(); i++) {
-                    if (parsed.get(i).equals(">") || parsed.get(i).equals("1>")) {
+                    if (parsed.get(i).equals(">")
+                            || parsed.get(i).equals("1>")
+                            || parsed.get(i).equals("2>")) {
                         redirectIndex = i;
                         break;
                     }
@@ -44,27 +46,36 @@ public class Main {
                 int end = (redirectIndex == -1) ? parsed.size() : redirectIndex;
 
                 for (int i = 1; i < end; i++) {
-
-                    if (i > 1) {
-                        output.append(" ");
-                    }
-
+                    if (i > 1) output.append(" ");
                     output.append(parsed.get(i));
                 }
 
                 if (redirectIndex != -1) {
 
+                    String operator = parsed.get(redirectIndex);
                     String fileName = parsed.get(redirectIndex + 1);
 
-                    Files.writeString(
-                            Path.of(fileName),
-                            output.toString() + System.lineSeparator());
+                    if (operator.equals("2>")) {
+
+                        Files.createDirectories(Path.of(fileName).toAbsolutePath().getParent());
+                        Files.writeString(Path.of(fileName), "");
+                        System.out.println(output);
+
+                    } else {
+
+                        Files.createDirectories(Path.of(fileName).toAbsolutePath().getParent());
+                        Files.writeString(
+                                Path.of(fileName),
+                                output.toString() + System.lineSeparator()
+                        );
+                    }
 
                 } else {
 
                     System.out.println(output);
                 }
-            }
+
+            } // ✅ echo block ends here
 
             else if (input.equals("pwd")) {
 
@@ -79,26 +90,18 @@ public class Main {
                 Path newPath;
 
                 if (dirName.equals("~")) {
-
                     newPath = Path.of(System.getenv("HOME"));
-
                 } else if (dirName.startsWith("/")) {
-
                     newPath = Path.of(dirName);
-
                 } else {
-
                     newPath = currentDirectory.resolve(dirName);
                 }
 
                 newPath = newPath.normalize();
 
                 if (newPath.toFile().exists() && newPath.toFile().isDirectory()) {
-
                     currentDirectory = newPath;
-
                 } else {
-
                     System.out.println("cd: " + dirName + ": No such file or directory");
                 }
             }
@@ -108,10 +111,8 @@ public class Main {
                 String command = input.substring(5);
 
                 if (builtins.contains(command)) {
-
                     System.out.println(command + " is a shell builtin");
-
-                } else {
+                                    } else {
 
                     String path = System.getenv("PATH");
                     String[] dirs = path.split(File.pathSeparator);
@@ -123,7 +124,6 @@ public class Main {
                         File file = new File(dir, command);
 
                         if (file.exists() && file.canExecute()) {
-
                             System.out.println(command + " is " + file.getAbsolutePath());
                             found = true;
                             break;
@@ -131,7 +131,6 @@ public class Main {
                     }
 
                     if (!found) {
-
                         System.out.println(command + ": not found");
                     }
                 }
@@ -144,9 +143,9 @@ public class Main {
                 int redirectIndex = -1;
 
                 for (int i = 0; i < parsed.size(); i++) {
-
-                    if (parsed.get(i).equals(">") || parsed.get(i).equals("1>")) {
-
+                    if (parsed.get(i).equals(">")
+                            || parsed.get(i).equals("1>")
+                            || parsed.get(i).equals("2>")) {
                         redirectIndex = i;
                         break;
                     }
@@ -155,20 +154,13 @@ public class Main {
                 List<String> commandArgs = new ArrayList<>();
 
                 for (int i = 0; i < parsed.size(); i++) {
-
-                    if (i == redirectIndex) {
-                        break;
-                    }
-
+                    if (i == redirectIndex) break;
                     commandArgs.add(parsed.get(i));
                 }
 
-                if (commandArgs.isEmpty()) {
-                    continue;
-                }
+                if (commandArgs.isEmpty()) continue;
 
                 String command = commandArgs.get(0);
-
                 String[] parts = commandArgs.toArray(new String[0]);
 
                 String path = System.getenv("PATH");
@@ -177,11 +169,8 @@ public class Main {
                 File executable = null;
 
                 for (String dir : dirs) {
-
                     File file = new File(dir, command);
-
                     if (file.exists() && file.canExecute()) {
-
                         executable = file;
                         break;
                     }
@@ -190,18 +179,25 @@ public class Main {
                 if (executable != null) {
 
                     ProcessBuilder pb = new ProcessBuilder(parts);
-
                     pb.directory(currentDirectory.toFile());
 
                     if (redirectIndex != -1) {
 
+                        String operator = parsed.get(redirectIndex);
                         String fileName = parsed.get(redirectIndex + 1);
 
-                        pb.redirectOutput(new File(fileName));
-                        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+                        if (operator.equals("2>")) {
+
+                            pb.redirectError(new File(fileName));
+                            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+
+                        } else {
+
+                            pb.redirectOutput(new File(fileName));
+                            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+                        }
 
                     } else {
-
                         pb.inheritIO();
                     }
 
@@ -209,7 +205,6 @@ public class Main {
                     process.waitFor();
 
                 } else {
-
                     System.out.println(command + ": command not found");
                 }
             }
@@ -229,15 +224,8 @@ public class Main {
             char c = input.charAt(i);
 
             if (inSingleQuotes) {
-
-                if (c == '\'') {
-
-                    inSingleQuotes = false;
-
-                } else {
-
-                    current.append(c);
-                }
+                if (c == '\'') inSingleQuotes = false;
+                else current.append(c);
             }
 
             else if (inDoubleQuotes) {
@@ -245,32 +233,23 @@ public class Main {
                 if (c == '\\') {
 
                     if (i + 1 < input.length()) {
-
                         char next = input.charAt(i + 1);
 
                         if (next == '"' || next == '\\') {
-
                             current.append(next);
                             i++;
-
                         } else {
-
                             current.append('\\');
                             current.append(next);
                             i++;
                         }
-
                     } else {
-
                         current.append('\\');
                     }
 
                 } else if (c == '"') {
-
                     inDoubleQuotes = false;
-
                 } else {
-
                     current.append(c);
                 }
             }
@@ -280,17 +259,14 @@ public class Main {
                 if (c == '\\') {
 
                     if (i + 1 < input.length()) {
-
                         current.append(input.charAt(i + 1));
                         i++;
                     }
 
                 } else if (c == '\'') {
-
                     inSingleQuotes = true;
 
                 } else if (c == '"') {
-
                     inDoubleQuotes = true;
 
                 } else if (c == '>') {
@@ -300,11 +276,10 @@ public class Main {
                         String token = current.toString();
 
                         if (token.equals("1")) {
-
                             args.add("1>");
-
+                        } else if (token.equals("2")) {
+                            args.add("2>");
                         } else {
-
                             args.add(token);
                             args.add(">");
                         }
@@ -312,27 +287,23 @@ public class Main {
                         current.setLength(0);
 
                     } else {
-
                         args.add(">");
                     }
 
                 } else if (Character.isWhitespace(c)) {
 
                     if (current.length() > 0) {
-
                         args.add(current.toString());
                         current.setLength(0);
                     }
 
                 } else {
-
                     current.append(c);
                 }
             }
         }
 
         if (current.length() > 0) {
-
             args.add(current.toString());
         }
 
