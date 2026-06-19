@@ -147,46 +147,53 @@ public class Main {
         }
     }
 
-    private static List<String> parseCommand(String input) {
+   private static List<String> parseCommand(String input) {
 
-        List<String> args = new ArrayList<>();
+    List<String> args = new ArrayList<>();
 
-        StringBuilder current = new StringBuilder();
+    StringBuilder current = new StringBuilder();
 
-        boolean inSingleQuotes = false;
-        boolean inDoubleQuotes = false;
+    boolean inSingleQuotes = false;
+    boolean inDoubleQuotes = false;
 
-        for (int i = 0; i < input.length(); i++) {
+    for (int i = 0; i < input.length(); i++) {
 
-            char c = input.charAt(i);
+        char c = input.charAt(i);
 
-            if (c == '\'' && !inDoubleQuotes) {
+        if (c == '\\' && !inSingleQuotes && !inDoubleQuotes) {
 
-                inSingleQuotes = !inSingleQuotes;
-
-            } else if (c == '"' && !inSingleQuotes) {
-
-                inDoubleQuotes = !inDoubleQuotes;
-
-            } else if (Character.isWhitespace(c)
-                    && !inSingleQuotes
-                    && !inDoubleQuotes) {
-
-                if (current.length() > 0) {
-                    args.add(current.toString());
-                    current.setLength(0);
-                }
-
-            } else {
-
-                current.append(c);
+            if (i + 1 < input.length()) {
+                current.append(input.charAt(i + 1));
+                i++;
             }
-        }
 
-        if (current.length() > 0) {
-            args.add(current.toString());
-        }
+        } else if (c == '\'' && !inDoubleQuotes) {
 
-        return args;
+            inSingleQuotes = !inSingleQuotes;
+
+        } else if (c == '"' && !inSingleQuotes) {
+
+            inDoubleQuotes = !inDoubleQuotes;
+
+        } else if (Character.isWhitespace(c)
+                && !inSingleQuotes
+                && !inDoubleQuotes) {
+
+            if (current.length() > 0) {
+                args.add(current.toString());
+                current.setLength(0);
+            }
+
+        } else {
+
+            current.append(c);
+        }
     }
+
+    if (current.length() > 0) {
+        args.add(current.toString());
+    }
+
+    return args;
 }
+    }
