@@ -48,7 +48,7 @@ public class Main {
             String command = parsed.get(0);
 
             if ("echo".equals(command)) {
-                handleEcho(parsed);
+                handleEcho(parsed, System.out);  // Fixed: now passes PrintStream
                 continue;
             }
 
@@ -110,7 +110,6 @@ public class Main {
         boolean leftBuiltin = BUILTINS.contains(leftCmd);
         boolean rightBuiltin = BUILTINS.contains(rightCmd);
 
-        // Check executables
         if (!leftBuiltin && findExecutable(leftCmd) == null) {
             System.out.println(leftCmd + ": command not found");
             return;
@@ -146,7 +145,7 @@ public class Main {
                 rightThread.join();
             }
         } else if (leftBuiltin) {
-            // Left is builtin, right is external
+            // Left builtin → right external
             try (PipedOutputStream pos = new PipedOutputStream();
                  PipedInputStream pis = new PipedInputStream(pos)) {
 
@@ -176,7 +175,7 @@ public class Main {
                 copier.join();
             }
         } else if (rightBuiltin) {
-            // Left is external, right is builtin
+            // Left external → right builtin
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             leftPb.directory(currentDirectory.toFile());
             leftPb.redirectOutput(ProcessBuilder.Redirect.PIPE);
@@ -233,11 +232,7 @@ public class Main {
                         out.println(target + " is a shell builtin");
                     } else {
                         File exec = findExecutable(target);
-                        if (exec != null) {
-                            out.println(target + " is " + exec.getAbsolutePath());
-                        } else {
-                            out.println(target + ": not found");
-                        }
+                        out.println(exec != null ? target + " is " + exec.getAbsolutePath() : target + ": not found");
                     }
                 }
             }
@@ -252,11 +247,11 @@ public class Main {
             }
         }
 
-        // Consume stdin if provided (important for pipelines)
+        // Consume stdin if provided (for pipelines)
         if (stdin != null) {
-            try (stdin) {
+            try (InputStream is = stdin) {
                 byte[] buf = new byte[8192];
-                while (stdin.read(buf) != -1) {}
+                while (is.read(buf) != -1) {}
             } catch (Exception ignored) {}
         }
 
@@ -286,8 +281,8 @@ public class Main {
     private static int findRedirectIndex(List<String> parsed) {
         for (int i = 0; i < parsed.size(); i++) {
             String s = parsed.get(i);
-            if (s.equals(">") || s.equals("1>") || s.equals("2>") || s.equals(">>") ||
-                s.equals("1>>") || s.equals("2>>")) {
+            if (s.equals(">") || s.equals("1>") || s.equals("2>") ||
+                s.equals(">>") || s.equals("1>>") || s.equals("2>>")) {
                 return i;
             }
         }
@@ -306,7 +301,6 @@ public class Main {
         if (redirectIndex == -1) {
             pb.inheritIO();
         }
-        // TODO: implement full redirect support if needed
     }
 
     private static File findExecutable(String command) {
