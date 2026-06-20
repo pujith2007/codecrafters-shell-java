@@ -48,7 +48,7 @@ public class Main {
             String command = parsed.get(0);
 
             if ("echo".equals(command)) {
-                handleEcho(parsed, System.out);  // Fixed: now passes PrintStream
+                handleEcho(parsed, System.out);
                 continue;
             }
 
@@ -120,7 +120,6 @@ public class Main {
         }
 
         if (leftBuiltin && rightBuiltin) {
-            // Both built-ins
             try (PipedOutputStream pos = new PipedOutputStream();
                  PipedInputStream pis = new PipedInputStream(pos)) {
 
@@ -145,7 +144,6 @@ public class Main {
                 rightThread.join();
             }
         } else if (leftBuiltin) {
-            // Left builtin → right external
             try (PipedOutputStream pos = new PipedOutputStream();
                  PipedInputStream pis = new PipedInputStream(pos)) {
 
@@ -175,7 +173,6 @@ public class Main {
                 copier.join();
             }
         } else if (rightBuiltin) {
-            // Left external → right builtin
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             leftPb.directory(currentDirectory.toFile());
             leftPb.redirectOutput(ProcessBuilder.Redirect.PIPE);
@@ -193,7 +190,6 @@ public class Main {
             leftProcess.waitFor();
             rightThread.join();
         } else {
-            // Both external
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
             leftPb.directory(currentDirectory.toFile());
@@ -247,7 +243,6 @@ public class Main {
             }
         }
 
-        // Consume stdin if provided (for pipelines)
         if (stdin != null) {
             try (InputStream is = stdin) {
                 byte[] buf = new byte[8192];
@@ -322,7 +317,7 @@ public class Main {
 
     private static void reapBackgroundJobs(List<Job> backgroundJobs) {
         List<Job> stillRunning = new ArrayList<>();
-        for (Job job : backgroundJobs) {
+        for (Job job : new ArrayList<>(backgroundJobs)) {
             if (isAlive(job.process)) {
                 stillRunning.add(job);
             } else {
