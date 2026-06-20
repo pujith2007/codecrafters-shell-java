@@ -26,22 +26,18 @@ public class Main {
             System.out.print("$ ");
             String input = scanner.nextLine().trim();
             if (input.isEmpty()) continue;
+
             if (input.equals("exit")) break;
 
             List<String> parsed = parseCommand(input);
-            int pipeIndex = -1;
-            for (int i = 0; i < parsed.size(); i++) {
-                if (parsed.get(i).equals("|")) {
-                    pipeIndex = i;
-                    break;
-                }
-            }
+            int pipeIndex = findPipeIndex(parsed);
 
             if (pipeIndex != -1) {
                 handlePipeline(parsed, pipeIndex, currentDirectory);
                 continue;
             }
 
+            // Handle background job
             boolean isBackground = false;
             if (!parsed.isEmpty() && parsed.get(parsed.size() - 1).equals("&")) {
                 isBackground = true;
@@ -50,10 +46,12 @@ public class Main {
             if (parsed.isEmpty()) continue;
 
             String command = parsed.get(0);
+
             if ("echo".equals(command)) {
                 handleEcho(parsed);
                 continue;
             }
+
             if (BUILTINS.contains(command)) {
                 executeBuiltin(parsed, null, System.out, currentDirectory, backgroundJobs);
                 continue;
@@ -67,11 +65,13 @@ public class Main {
 
             int redirectIndex = findRedirectIndex(parsed);
             List<String> commandArgs = getCommandArgs(parsed, redirectIndex);
+
             ProcessBuilder pb = new ProcessBuilder(commandArgs);
             pb.directory(currentDirectory.toFile());
             setupRedirects(pb, parsed, redirectIndex);
 
             Process process = pb.start();
+
             if (isBackground) {
                 Job job = new Job();
                 job.jobId = getNextJobId(backgroundJobs);
@@ -86,20 +86,18 @@ public class Main {
         }
     }
 
-    private static void handleEcho(List<String> parsed) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 1; i < parsed.size(); i++) {
-            if (i > 1) sb.append(" ");
-            sb.append(parsed.get(i));
+    private static int findPipeIndex(List<String> parsed) {
+        for (int i = 0; i < parsed.size(); i++) {
+            if (parsed.get(i).equals("|")) {
+                return i;
+            }
         }
-        System.out.println(sb);
+        return -1;
     }
 
     private static void handlePipeline(List<String> parsed, int pipeIndex, Path currentDirectory) throws Exception {
-        List<String> leftArgs = new ArrayList<>();
-        List<String> rightArgs = new ArrayList<>();
-        for (int i = 0; i < pipeIndex; i++) leftArgs.add(parsed.get(i));
-        for (int i = pipeIndex + 1; i < parsed.size(); i++) rightArgs.add(parsed.get(i));
+        List<String> leftArgs = parsed.subList(0, pipeIndex);
+        List<String> rightArgs = parsed.subList(pipeIndex + 1, parsed.size());
 
         if (leftArgs.isEmpty() || rightArgs.isEmpty()) {
             System.out.println("parse error: near `|'");
@@ -112,6 +110,7 @@ public class Main {
         boolean leftBuiltin = BUILTINS.contains(leftCmd);
         boolean rightBuiltin = BUILTINS.contains(rightCmd);
 
+        // Check executables
         if (!leftBuiltin && findExecutable(leftCmd) == null) {
             System.out.println(leftCmd + ": command not found");
             return;
@@ -121,7 +120,8 @@ public class Main {
             return;
         }
 
-        if (leftBuiltin) {
+        if (leftBuiltin && rightBuiltin) {
+            // Both built-ins
             try (PipedOutputStream pos = new PipedOutputStream();
                  PipedInputStream pis = new PipedInputStream(pos)) {
 
@@ -129,7 +129,34 @@ public class Main {
                     try {
                         executeBuiltin(leftArgs, null, pos, currentDirectory, null);
                     } catch (Exception ignored) {}
-                    finally { try { pos.close(); } catch (Exception ignored) {} }
+                    finally {
+                        try { pos.close(); } catch (Exception ignored) {}
+                    }
+                });
+                leftThread.start();
+
+                Thread rightThread = new Thread(() -> {
+                    try {
+                        executeBuiltin(rightArgs, pis, System.out, currentDirectory, null);
+                    } catch (Exception ignored) {}
+                });
+                rightThread.start();
+
+                leftThread.join();
+                rightThread.join();
+            }
+        } else if (leftBuiltin) {
+            // Left is builtin, right is external
+            try (PipedOutputStream pos = new PipedOutputStream();
+                 PipedInputStream pis = new PipedInputStream(pos)) {
+
+                Thread leftThread = new Thread(() -> {
+                    try {
+                        executeBuiltin(leftArgs, null, pos, currentDirectory, null);
+                    } catch (Exception ignored) {}
+                    finally {
+                        try { pos.close(); } catch (Exception ignored) {}
+                    }
                 });
                 leftThread.start();
 
@@ -149,10 +176,12 @@ public class Main {
                 copier.join();
             }
         } else if (rightBuiltin) {
+            // Left is external, right is builtin
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             leftPb.directory(currentDirectory.toFile());
             leftPb.redirectOutput(ProcessBuilder.Redirect.PIPE);
             leftPb.redirectError(ProcessBuilder.Redirect.INHERIT);
+
             Process leftProcess = leftPb.start();
 
             Thread rightThread = new Thread(() -> {
@@ -165,6 +194,7 @@ public class Main {
             leftProcess.waitFor();
             rightThread.join();
         } else {
+            // Both external
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
             leftPb.directory(currentDirectory.toFile());
@@ -182,53 +212,64 @@ public class Main {
             copier.start();
 
             rightProcess.waitFor();
-            if (leftProcess.isAlive()) {
-                leftProcess.destroyForcibly();
-            }
+            if (leftProcess.isAlive()) leftProcess.destroyForcibly();
             copier.join(1000);
         }
     }
 
-    private static void executeBuiltin(List<String> args, InputStream stdin, OutputStream stdout, 
+    private static void executeBuiltin(List<String> args, InputStream stdin, OutputStream stdout,
                                        Path currentDirectory, List<Job> backgroundJobs) throws Exception {
         if (args.isEmpty()) return;
         String cmd = args.get(0);
-        PrintStream out = stdout != null ? new PrintStream(stdout) : System.out;
+        PrintStream out = stdout != null ? new PrintStream(stdout, true) : System.out;
 
-        if ("echo".equals(cmd)) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 1; i < args.size(); i++) {
-                if (i > 1) sb.append(" ");
-                sb.append(args.get(i));
+        switch (cmd) {
+            case "echo" -> handleEcho(args, out);
+            case "pwd" -> out.println(currentDirectory.toAbsolutePath());
+            case "type" -> {
+                if (args.size() > 1) {
+                    String target = args.get(1);
+                    if (BUILTINS.contains(target)) {
+                        out.println(target + " is a shell builtin");
+                    } else {
+                        File exec = findExecutable(target);
+                        if (exec != null) {
+                            out.println(target + " is " + exec.getAbsolutePath());
+                        } else {
+                            out.println(target + ": not found");
+                        }
+                    }
+                }
             }
-            out.println(sb);
-        } else if ("pwd".equals(cmd)) {
-            out.println(currentDirectory.toAbsolutePath());
-        } else if ("type".equals(cmd) && args.size() > 1) {
-            String target = args.get(1);
-            if (BUILTINS.contains(target)) {
-                out.println(target + " is a shell builtin");
-            } else {
-                File exec = findExecutable(target);
-                out.println(exec != null ? target + " is " + exec.getAbsolutePath() : target + ": not found");
-            }
-        } else if ("jobs".equals(cmd)) {
-            if (backgroundJobs != null) {
-                for (Job job : backgroundJobs) {
-                    if (isAlive(job.process)) {
-                        out.println("[" + job.jobId + "]+ Running " + job.commandLine);
+            case "jobs" -> {
+                if (backgroundJobs != null) {
+                    for (Job job : backgroundJobs) {
+                        if (isAlive(job.process)) {
+                            out.println("[" + job.jobId + "]+ Running " + job.commandLine);
+                        }
                     }
                 }
             }
         }
 
+        // Consume stdin if provided (important for pipelines)
         if (stdin != null) {
-            try (InputStream is = stdin) {
+            try (stdin) {
                 byte[] buf = new byte[8192];
-                while (is.read(buf) != -1) {}
+                while (stdin.read(buf) != -1) {}
             } catch (Exception ignored) {}
         }
+
         out.flush();
+    }
+
+    private static void handleEcho(List<String> parsed, PrintStream out) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i < parsed.size(); i++) {
+            if (i > 1) sb.append(" ");
+            sb.append(parsed.get(i));
+        }
+        out.println(sb);
     }
 
     private static void copyStream(InputStream in, OutputStream out) {
@@ -245,7 +286,8 @@ public class Main {
     private static int findRedirectIndex(List<String> parsed) {
         for (int i = 0; i < parsed.size(); i++) {
             String s = parsed.get(i);
-            if (s.equals(">") || s.equals("1>") || s.equals("2>") || s.equals(">>") || s.equals("1>>") || s.equals("2>>")) {
+            if (s.equals(">") || s.equals("1>") || s.equals("2>") || s.equals(">>") ||
+                s.equals("1>>") || s.equals("2>>")) {
                 return i;
             }
         }
@@ -264,6 +306,7 @@ public class Main {
         if (redirectIndex == -1) {
             pb.inheritIO();
         }
+        // TODO: implement full redirect support if needed
     }
 
     private static File findExecutable(String command) {
@@ -312,6 +355,7 @@ public class Main {
 
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
+
             if (inSingleQuotes) {
                 if (c == '\'') inSingleQuotes = false;
                 else current.append(c);
@@ -322,21 +366,29 @@ public class Main {
                 else current.append(c);
             } else if (c == '\\' && i + 1 < input.length()) {
                 current.append(input.charAt(++i));
-            } else if (c == '\'') inSingleQuotes = true;
-            else if (c == '"') inDoubleQuotes = true;
-            else if (c == '|' || c == '>') {
+            } else if (c == '\'') {
+                inSingleQuotes = true;
+            } else if (c == '"') {
+                inDoubleQuotes = true;
+            } else if (c == '|' || c == '>') {
                 if (current.length() > 0) args.add(current.toString());
                 current.setLength(0);
-                if (c == '|') args.add("|");
-                else {
+                if (c == '|') {
+                    args.add("|");
+                } else {
                     if (i + 1 < input.length() && input.charAt(i + 1) == '>') {
-                        args.add(">>"); i++;
-                    } else args.add(">");
+                        args.add(">>");
+                        i++;
+                    } else {
+                        args.add(">");
+                    }
                 }
             } else if (Character.isWhitespace(c)) {
                 if (current.length() > 0) args.add(current.toString());
                 current.setLength(0);
-            } else current.append(c);
+            } else {
+                current.append(c);
+            }
         }
         if (current.length() > 0) args.add(current.toString());
         return args;
