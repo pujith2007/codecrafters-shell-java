@@ -39,12 +39,21 @@ public class Main {
 
             else if (input.equals("jobs") || input.startsWith("jobs ")) {
 
+                reapBackgroundJobs(backgroundJobs);
+
                 List<Job> stillRunning = new ArrayList<>();
 
                 int size = backgroundJobs.size();
                 for (int i = 0; i < size; i++) {
                     Job job = backgroundJobs.get(i);
-                    boolean isAlive = job.process.isAlive();
+
+                    boolean isAlive;
+                    try {
+                        job.process.exitValue();
+                        isAlive = false;
+                    } catch (IllegalThreadStateException e) {
+                        isAlive = true;
+                    }
 
                     String marker;
                     if (i == size - 1) {
@@ -400,7 +409,14 @@ public class Main {
         int size = backgroundJobs.size();
         for (int i = 0; i < size; i++) {
             Job job = backgroundJobs.get(i);
-            boolean isAlive = job.process.isAlive();
+
+            boolean isAlive;
+            try {
+                job.process.exitValue();
+                isAlive = false;
+            } catch (IllegalThreadStateException e) {
+                isAlive = true;
+            }
 
             String marker;
             if (i == size - 1) {
