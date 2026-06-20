@@ -524,7 +524,6 @@ public class Main {
     }
 
     private static List<String> parseCommand(String input) {
-        // (unchanged - includes the 2>> fix from previous stage)
         List<String> args = new ArrayList<>();
         StringBuilder current = new StringBuilder();
 
