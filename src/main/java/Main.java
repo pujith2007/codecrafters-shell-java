@@ -1,3 +1,4 @@
+```java
 import java.util.Scanner;
 import java.util.Set;
 import java.util.List;
@@ -340,13 +341,29 @@ public class Main {
 
                 ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
                 rightPb.directory(currentDirectory.toFile());
-                rightPb.redirectInput(pis);
+                rightPb.redirectInput(ProcessBuilder.Redirect.PIPE);
                 rightPb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                 rightPb.redirectError(ProcessBuilder.Redirect.INHERIT);
 
                 Process rightProcess = rightPb.start();
+
+                // Copy from PipedInputStream to right process stdin
+                Thread pipeThread = new Thread(() -> {
+                    try (OutputStream rightStdin = rightProcess.getOutputStream()) {
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = pis.read(buffer)) != -1) {
+                            rightStdin.write(buffer, 0, len);
+                            rightStdin.flush();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                });
+                pipeThread.start();
+
                 rightProcess.waitFor();
                 leftThread.join();
+                pipeThread.join();
             }
         } else if (rightIsBuiltin) {
             // external | builtin
@@ -609,3 +626,4 @@ public class Main {
         return args;
     }
 }
+```
