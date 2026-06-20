@@ -498,8 +498,18 @@ public class Main {
                 } else if (c == '|' || c == '>') {
 
                     if (current.length() > 0) {
-                        args.add(current.toString());
-                        current.setLength(0);
+                        String prev = current.toString();
+                        if (c == '>' && prev.length() > 0 && Character.isDigit(prev.charAt(prev.length() - 1))) {
+                            boolean append = (i + 1 < input.length() && input.charAt(i + 1) == '>');
+                            if (append) i++;
+                            String op = prev + (append ? ">>" : ">");
+                            args.add(op);
+                            current.setLength(0);
+                            continue;
+                        } else {
+                            args.add(prev);
+                            current.setLength(0);
+                        }
                     }
 
                     if (c == '|') {
@@ -507,7 +517,6 @@ public class Main {
                     } else {
                         boolean append = (i + 1 < input.length() && input.charAt(i + 1) == '>');
                         if (append) i++;
-
                         args.add(append ? ">>" : ">");
                     }
 
