@@ -260,24 +260,14 @@ public class Main {
                     Process rightProcess = rightPb.start();
 
                     new Thread(() -> {
-                        try (var in = leftProcess.getInputStream();
-                             var out = rightProcess.getOutputStream()) {
-                            in.transferTo(out);
+                        try {
+                            leftProcess.getInputStream().transferTo(rightProcess.getOutputStream());
+                            rightProcess.getOutputStream().close();
                         } catch (Exception ignored) {}
                     }).start();
 
-                    if (isBackground) {
-                        Job job = new Job();
-                        job.jobId = getNextJobId(backgroundJobs);
-                        job.pid = rightProcess.pid();
-                        job.process = rightProcess;
-                        job.commandLine = String.join(" ", parsed);
-                        backgroundJobs.add(job);
-                        System.out.println("[" + job.jobId + "] " + job.pid);
-                    } else {
-                        rightProcess.onExit().join();
-                        leftProcess.destroy();
-                    }
+                    rightProcess.onExit().join();
+                    leftProcess.destroy();
                     continue;
                 }
 
