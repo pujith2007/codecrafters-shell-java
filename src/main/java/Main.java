@@ -261,7 +261,12 @@ public class Main {
 
                     Thread pipeThread = new Thread(() -> {
                         try {
-                            leftProcess.getInputStream().transferTo(rightProcess.getOutputStream());
+                            byte[] buffer = new byte[8192];
+                            int len;
+                            while ((len = leftProcess.getInputStream().read(buffer)) != -1) {
+                                rightProcess.getOutputStream().write(buffer, 0, len);
+                                rightProcess.getOutputStream().flush();
+                            }
                         } catch (Exception ignored) {
                         } finally {
                             try {
@@ -269,7 +274,6 @@ public class Main {
                             } catch (Exception ignored) {}
                         }
                     });
-
                     pipeThread.start();
 
                     rightProcess.waitFor();
