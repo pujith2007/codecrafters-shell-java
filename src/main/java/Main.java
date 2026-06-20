@@ -1,4 +1,3 @@
-```java
 import java.util.Scanner;
 import java.util.Set;
 import java.util.List;
@@ -198,12 +197,11 @@ public class Main {
                 }
 
                 if (pipeIndex != -1) {
-                    // Pipeline support including built-ins
                     handlePipeline(parsed, pipeIndex, currentDirectory);
                     continue;
                 }
 
-                // Non-pipe command (existing logic)
+                // Non-pipe command
                 int redirectIndex = -1;
                 for (int i = 0; i < parsed.size(); i++) {
                     if (parsed.get(i).equals(">")
@@ -229,7 +227,6 @@ public class Main {
                 String[] parts = commandArgs.toArray(new String[0]);
 
                 if (BUILTINS.contains(command)) {
-                    // Built-in not in pipeline
                     try {
                         executeBuiltin(commandArgs, null, System.out, currentDirectory);
                     } catch (Exception e) {
@@ -318,7 +315,6 @@ public class Main {
         }
 
         if (leftIsBuiltin && rightIsBuiltin) {
-            // Rare case - run left (output discarded), then right
             executeBuiltin(leftArgs, null, new ByteArrayOutputStream(), currentDirectory);
             executeBuiltin(rightArgs, null, System.out, currentDirectory);
             return;
@@ -332,8 +328,8 @@ public class Main {
                 Thread leftThread = new Thread(() -> {
                     try {
                         executeBuiltin(leftArgs, null, pos, currentDirectory);
-                    } catch (Exception ignored) {
-                    } finally {
+                    } catch (Exception ignored) {}
+                    finally {
                         try { pos.close(); } catch (Exception ignored) {}
                     }
                 });
@@ -341,7 +337,7 @@ public class Main {
 
                 ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
                 rightPb.directory(currentDirectory.toFile());
-                rightPb.redirectInput(pis);  // Use the piped input directly
+                rightPb.redirectInput(pis);
                 rightPb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                 rightPb.redirectError(ProcessBuilder.Redirect.INHERIT);
 
@@ -362,24 +358,14 @@ public class Main {
             Thread rightThread = new Thread(() -> {
                 try {
                     executeBuiltin(rightArgs, leftProcess.getInputStream(), System.out, currentDirectory);
-                } catch (Exception ignored) {
-                } finally {
-                    // Ensure we consume all input to prevent pipe deadlock
-                    try {
-                        byte[] buffer = new byte[8192];
-                        int len;
-                        while ((len = leftProcess.getInputStream().read(buffer)) != -1) {
-                            // discard
-                        }
-                    } catch (Exception ignored) {}
-                }
+                } catch (Exception ignored) {}
             });
             rightThread.start();
 
             leftProcess.waitFor();
             rightThread.join();
         } else {
-            // external | external (original logic)
+            // external | external
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
 
@@ -402,8 +388,8 @@ public class Main {
                         rightProcess.getOutputStream().write(buffer, 0, len);
                         rightProcess.getOutputStream().flush();
                     }
-                } catch (Exception ignored) {
-                } finally {
+                } catch (Exception ignored) {}
+                finally {
                     try {
                         rightProcess.getOutputStream().close();
                     } catch (Exception ignored) {}
@@ -448,18 +434,18 @@ public class Main {
                     }
                 }
             }
-            // Consume stdin silently for pipelines (e.g., ls | type ...)
+            // Consume stdin when used in pipeline (e.g. ls | type ...)
             if (stdin != null) {
                 try {
                     byte[] buffer = new byte[8192];
                     int len;
                     while ((len = stdin.read(buffer)) != -1) {
-                        // discard
+                        // discard input
                     }
                 } catch (Exception ignored) {}
             }
         } else if ("cd".equals(cmd) || "jobs".equals(cmd) || "exit".equals(cmd)) {
-            // No-op or not supported in pipeline
+            // Not supported in pipelines
         }
 
         out.flush();
@@ -479,14 +465,10 @@ public class Main {
     }
 
     private static int getNextJobId(List<Job> jobs) {
-        if (jobs.isEmpty()) {
-            return 1;
-        }
+        if (jobs.isEmpty()) return 1;
         int max = 0;
         for (Job job : jobs) {
-            if (job.jobId > max) {
-                max = job.jobId;
-            }
+            if (job.jobId > max) max = job.jobId;
         }
         return max + 1;
     }
@@ -507,14 +489,7 @@ public class Main {
             }
 
             if (!isAlive) {
-                String marker;
-                if (i == size - 1) {
-                    marker = "+";
-                } else if (i == size - 2) {
-                    marker = "-";
-                } else {
-                    marker = " ";
-                }
+                String marker = (i == size - 1) ? "+" : (i == size - 2) ? "-" : " ";
                 String status = "Done";
                 String padding = "                    ";
                 System.out.println("[" + job.jobId + "]" + marker + "  " + status + padding + job.commandLine);
@@ -535,72 +510,46 @@ public class Main {
         boolean inDoubleQuotes = false;
 
         for (int i = 0; i < input.length(); i++) {
-
             char c = input.charAt(i);
 
             if (inSingleQuotes) {
                 if (c == '\'') inSingleQuotes = false;
                 else current.append(c);
             }
-
             else if (inDoubleQuotes) {
-
                 if (c == '\\') {
-
                     if (i + 1 < input.length()) {
                         char next = input.charAt(i + 1);
-
                         if (next == '"' || next == '\\') {
                             current.append(next);
                             i++;
                         } else {
-                            current.append('\\');
+                            current.append(c);
                             current.append(next);
                             i++;
                         }
-                    } else {
-                        current.append('\\');
                     }
-
                 } else if (c == '"') {
                     inDoubleQuotes = false;
                 } else {
                     current.append(c);
                 }
             }
-
             else {
-
                 if (c == '\\') {
-
                     if (i + 1 < input.length()) {
                         current.append(input.charAt(i + 1));
                         i++;
                     }
-
                 } else if (c == '\'') {
                     inSingleQuotes = true;
-
                 } else if (c == '"') {
                     inDoubleQuotes = true;
-
                 } else if (c == '|' || c == '>') {
-
                     if (current.length() > 0) {
-                        String prev = current.toString();
-                        if (c == '>' && prev.length() > 0 && Character.isDigit(prev.charAt(prev.length() - 1))) {
-                            boolean append = (i + 1 < input.length() && input.charAt(i + 1) == '>');
-                            if (append) i++;
-                            String op = prev + (append ? ">>" : ">");
-                            args.add(op);
-                            current.setLength(0);
-                            continue;
-                        } else {
-                            args.add(prev);
-                            current.setLength(0);
-                        }
+                        args.add(current.toString());
+                        current.setLength(0);
                     }
-
                     if (c == '|') {
                         args.add("|");
                     } else {
@@ -608,14 +557,11 @@ public class Main {
                         if (append) i++;
                         args.add(append ? ">>" : ">");
                     }
-
                 } else if (Character.isWhitespace(c)) {
-
                     if (current.length() > 0) {
                         args.add(current.toString());
                         current.setLength(0);
                     }
-
                 } else {
                     current.append(c);
                 }
@@ -629,5 +575,3 @@ public class Main {
         return args;
     }
 }
-
-
