@@ -98,10 +98,8 @@ public class Main {
     }
 
     private static void handleEcho(List<String> parsed) {
-        int redirectIndex = findRedirectIndex(parsed);
         StringBuilder output = new StringBuilder();
-        int end = (redirectIndex == -1) ? parsed.size() : redirectIndex;
-        for (int i = 1; i < end; i++) {
+        for (int i = 1; i < parsed.size(); i++) {
             if (i > 1) output.append(" ");
             output.append(parsed.get(i));
         }
@@ -155,12 +153,12 @@ public class Main {
                 Process rightProcess = rightPb.start();
 
                 Thread copier = new Thread(() -> {
-                    try (OutputStream out = rightProcess.getOutputStream()) {
+                    try (OutputStream rightIn = rightProcess.getOutputStream()) {
                         byte[] buf = new byte[8192];
                         int len;
                         while ((len = pis.read(buf)) != -1) {
-                            out.write(buf, 0, len);
-                            out.flush();
+                            rightIn.write(buf, 0, len);
+                            rightIn.flush();
                         }
                     } catch (Exception ignored) {}
                     finally { try { rightProcess.getOutputStream().close(); } catch (Exception ignored) {} }
@@ -189,7 +187,7 @@ public class Main {
             leftProcess.waitFor();
             rightThread.join();
         } else {
-            // === External | External - IMPROVED for tail -f | head ===
+            // External | External - Critical fix for tail -f | head
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
             leftPb.directory(currentDirectory.toFile());
@@ -213,14 +211,14 @@ public class Main {
             });
             copier.start();
 
-            // Wait for the right side (head) to finish
+            // Wait for RIGHT side (head) to finish
             rightProcess.waitFor();
 
-            // Give left side a moment to finish naturally, then destroy if still alive
-            Thread.sleep(100); // small grace period
+            // Kill left side (tail -f) if still running
             if (leftProcess.isAlive()) {
                 leftProcess.destroy();
             }
+
             copier.join();
         }
     }
@@ -250,7 +248,7 @@ public class Main {
         }
 
         if (stdin != null) {
-            try { 
+            try (stdin) {
                 byte[] buf = new byte[8192];
                 while (stdin.read(buf) != -1) {}
             } catch (Exception ignored) {}
@@ -258,11 +256,13 @@ public class Main {
         out.flush();
     }
 
-    // ==================== Helper Methods ====================
+    // ==================== Helpers ====================
     private static int findRedirectIndex(List<String> parsed) {
         for (int i = 0; i < parsed.size(); i++) {
             String s = parsed.get(i);
-            if (s.matches("^[12]?>{1,2}$")) return i;
+            if (s.equals(">") || s.equals("1>") || s.equals("2>") || s.equals(">>") || s.equals("1>>") || s.equals("2>>")) {
+                return i;
+            }
         }
         return -1;
     }
@@ -278,9 +278,7 @@ public class Main {
     private static void setupRedirects(ProcessBuilder pb, List<String> parsed, int redirectIndex) {
         if (redirectIndex == -1) {
             pb.inheritIO();
-            return;
         }
-        pb.inheritIO(); // fallback - expand if needed
     }
 
     private static File findExecutable(String command) {
@@ -328,11 +326,11 @@ public class Main {
                 if (c == '\'') inSingleQuotes = false;
                 else current.append(c);
             } else if (inDoubleQuotes) {
-                if (c == '\\' && i+1 < input.length()) {
+                if (c == '\\' && i + 1 < input.length()) {
                     current.append(input.charAt(++i));
                 } else if (c == '"') inDoubleQuotes = false;
                 else current.append(c);
-            } else if (c == '\\' && i+1 < input.length()) {
+            } else if (c == '\\' && i + 1 < input.length()) {
                 current.append(input.charAt(++i));
             } else if (c == '\'') inSingleQuotes = true;
             else if (c == '"') inDoubleQuotes = true;
@@ -341,8 +339,9 @@ public class Main {
                 current.setLength(0);
                 if (c == '|') args.add("|");
                 else {
-                    if (i+1 < input.length() && input.charAt(i+1) == '>') { args.add(">>"); i++; }
-                    else args.add(">");
+                    if (i + 1 < input.length() && input.charAt(i + 1) == '>') {
+                        args.add(">>"); i++;
+                    } else args.add(">");
                 }
             } else if (Character.isWhitespace(c)) {
                 if (current.length() > 0) args.add(current.toString());
