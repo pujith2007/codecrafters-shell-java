@@ -12,7 +12,7 @@ public class Main {
 
         Scanner scanner = new Scanner(System.in);
 
-        Set<String> builtins = Set.of("echo", "exit", "type", "pwd", "cd");
+        Set<String> builtins = Set.of("echo", "exit", "type", "pwd", "cd", "jobs");
 
         Path currentDirectory = Path.of(System.getProperty("user.dir"));
 
@@ -20,10 +20,14 @@ public class Main {
 
             System.out.print("$ ");
 
-            String input = scanner.nextLine();
+            String input = scanner.nextLine().trim();
 
             if (input.equals("exit")) {
                 break;
+            }
+
+            else if (input.equals("jobs") || input.startsWith("jobs ")) {
+                continue;
             }
 
             else if (input.startsWith("echo ")) {
@@ -92,7 +96,7 @@ public class Main {
                     System.out.println(output);
                 }
 
-            } // echo ends
+            }
 
             else if (input.equals("pwd")) {
 
@@ -102,7 +106,7 @@ public class Main {
 
             else if (input.startsWith("cd ")) {
 
-                String dirName = input.substring(3);
+                String dirName = input.substring(3).trim();
 
                 Path newPath;
 
@@ -125,7 +129,7 @@ public class Main {
 
             else if (input.startsWith("type ")) {
 
-                String command = input.substring(5);
+                String command = input.substring(5).trim();
 
                 if (builtins.contains(command)) {
                     System.out.println(command + " is a shell builtin");
@@ -312,11 +316,11 @@ public class Main {
 
                         String token = current.toString();
 
-                      if (token.equals("1")) {
-    args.add(append ? "1>>" : "1>");
-} else if (token.equals("2")) {
-    args.add(append ? "2>>" : "2>");
-}
+                        if (token.equals("1")) {
+                            args.add(append ? "1>>" : "1>");
+                        } else if (token.equals("2")) {
+                            args.add(append ? "2>>" : "2>");
+                        }
                         else {
                             args.add(token);
                             args.add(append ? ">>" : ">");
