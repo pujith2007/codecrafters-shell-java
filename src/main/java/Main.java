@@ -1,4 +1,4 @@
- import java.util.Scanner;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
@@ -31,13 +31,10 @@ public class Main {
             String input = scanner.nextLine().trim();
             if (input.isEmpty()) continue;
 
-            if (input.equals("exit")) {
-                break;
-            }
+            if (input.equals("exit")) break;
 
             List<String> parsed = parseCommand(input);
 
-            // Pipeline detection - highest priority
             int pipeIndex = -1;
             for (int i = 0; i < parsed.size(); i++) {
                 if (parsed.get(i).equals("|")) {
@@ -51,7 +48,6 @@ public class Main {
                 continue;
             }
 
-            // Background job
             boolean isBackground = false;
             if (!parsed.isEmpty() && parsed.get(parsed.size() - 1).equals("&")) {
                 isBackground = true;
@@ -62,19 +58,16 @@ public class Main {
 
             String command = parsed.get(0);
 
-            // Special echo (non-pipeline)
             if ("echo".equals(command)) {
                 handleEcho(parsed);
                 continue;
             }
 
-            // Other built-ins
             if (BUILTINS.contains(command)) {
                 executeBuiltin(parsed, null, System.out, currentDirectory);
                 continue;
             }
 
-            // External command
             File executable = findExecutable(command);
             if (executable == null) {
                 System.out.println(command + ": command not found");
@@ -105,12 +98,12 @@ public class Main {
     }
 
     private static void handleEcho(List<String> parsed) {
-        StringBuilder output = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         for (int i = 1; i < parsed.size(); i++) {
-            if (i > 1) output.append(" ");
-            output.append(parsed.get(i));
+            if (i > 1) sb.append(" ");
+            sb.append(parsed.get(i));
         }
-        System.out.println(output);
+        System.out.println(sb);
     }
 
     private static void handlePipeline(List<String> parsed, int pipeIndex, Path currentDirectory) throws Exception {
@@ -161,12 +154,12 @@ public class Main {
                 Process rightProcess = rightPb.start();
 
                 Thread copier = new Thread(() -> {
-                    try (OutputStream out = rightProcess.getOutputStream()) {
+                    try (OutputStream rightIn = rightProcess.getOutputStream()) {
                         byte[] buf = new byte[8192];
                         int len;
                         while ((len = pis.read(buf)) != -1) {
-                            out.write(buf, 0, len);
-                            out.flush();
+                            rightIn.write(buf, 0, len);
+                            rightIn.flush();
                         }
                     } catch (Exception ignored) {}
                     finally { try { rightProcess.getOutputStream().close(); } catch (Exception ignored) {} }
@@ -220,10 +213,14 @@ public class Main {
             });
             copier.start();
 
-            rightProcess.waitFor();   // head finishes
+            // Wait for head to finish
+            rightProcess.waitFor();
+
+            // Kill tail -f
             if (leftProcess.isAlive()) {
-                leftProcess.destroy();
+                leftProcess.destroyForcibly();
             }
+
             copier.join();
         }
     }
