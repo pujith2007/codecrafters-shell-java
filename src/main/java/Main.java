@@ -203,10 +203,82 @@ public class Main {
 
                 List<String> parsed = parseCommand(input);
 
+                int pipeIndex = -1;
+                for (int i = 0; i < parsed.size(); i++) {
+                    if (parsed.get(i).equals("|")) {
+                        pipeIndex = i;
+                        break;
+                    }
+                }
+
                 boolean isBackground = false;
-                if (!parsed.isEmpty() && parsed.get(parsed.size() - 1).equals("&")) {
+                if (pipeIndex == -1 && !parsed.isEmpty() && parsed.get(parsed.size() - 1).equals("&")) {
                     isBackground = true;
                     parsed.remove(parsed.size() - 1);
+                }
+
+                if (pipeIndex != -1) {
+                    List<String> leftArgs = new ArrayList<>();
+                    List<String> rightArgs = new ArrayList<>();
+
+                    for (int i = 0; i < pipeIndex; i++) {
+                        leftArgs.add(parsed.get(i));
+                    }
+                    for (int i = pipeIndex + 1; i < parsed.size(); i++) {
+                        rightArgs.add(parsed.get(i));
+                    }
+
+                    if (leftArgs.isEmpty() || rightArgs.isEmpty()) {
+                        System.out.println("parse error: near `|'");
+                        continue;
+                    }
+
+                    File leftExec = findExecutable(leftArgs.get(0));
+                    File rightExec = findExecutable(rightArgs.get(0));
+
+                    if (leftExec == null) {
+                        System.out.println(leftArgs.get(0) + ": command not found");
+                        continue;
+                    }
+                    if (rightExec == null) {
+                        System.out.println(rightArgs.get(0) + ": command not found");
+                        continue;
+                    }
+
+                    ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
+                    ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
+
+                    leftPb.directory(currentDirectory.toFile());
+                    rightPb.directory(currentDirectory.toFile());
+
+                    leftPb.redirectOutput(ProcessBuilder.Redirect.PIPE);
+                    rightPb.redirectInput(ProcessBuilder.Redirect.PIPE);
+                    rightPb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                    rightPb.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                    Process leftProcess = leftPb.start();
+                    Process rightProcess = rightPb.start();
+
+                    new Thread(() -> {
+                        try {
+                            leftProcess.getInputStream().transferTo(rightProcess.getOutputStream());
+                            rightProcess.getOutputStream().close();
+                        } catch (Exception e) {}
+                    }).start();
+
+                    if (isBackground) {
+                        Job job = new Job();
+                        job.jobId = getNextJobId(backgroundJobs);
+                        job.pid = rightProcess.pid();
+                        job.process = rightProcess;
+                        job.commandLine = String.join(" ", parsed);
+                        backgroundJobs.add(job);
+                        System.out.println("[" + job.jobId + "] " + job.pid);
+                    } else {
+                        leftProcess.waitFor();
+                        rightProcess.waitFor();
+                    }
+                    continue;
                 }
 
                 int redirectIndex = -1;
@@ -235,18 +307,7 @@ public class Main {
                 String command = commandArgs.get(0);
                 String[] parts = commandArgs.toArray(new String[0]);
 
-                File executable = null;
-
-                String path = System.getenv("PATH");
-                String[] dirs = path.split(File.pathSeparator);
-
-                for (String dir : dirs) {
-                    File file = new File(dir, command);
-                    if (file.exists() && file.canExecute()) {
-                        executable = file;
-                        break;
-                    }
-                }
+                File executable = findExecutable(command);
 
                 if (executable != null) {
 
@@ -261,24 +322,17 @@ public class Main {
                         File outFile = new File(fileName);
 
                         if (operator.equals("2>")) {
-
                             pb.redirectError(outFile);
                             pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-
                         }
                         else if (operator.equals("2>>")) {
-
                             pb.redirectError(ProcessBuilder.Redirect.appendTo(outFile));
                             pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-
                         }
                         else if (operator.equals(">") || operator.equals("1>")) {
-
                             pb.redirectOutput(outFile);
                             pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-
                         } else if (operator.equals(">>") || operator.equals("1>>")) {
-
                             pb.redirectOutput(ProcessBuilder.Redirect.appendTo(outFile));
                             pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                         }
@@ -307,6 +361,19 @@ public class Main {
                 }
             }
         }
+    }
+
+    private static File findExecutable(String command) {
+        String path = System.getenv("PATH");
+        if (path == null) return null;
+        String[] dirs = path.split(File.pathSeparator);
+        for (String dir : dirs) {
+            File file = new File(dir, command);
+            if (file.exists() && file.canExecute()) {
+                return file;
+            }
+        }
+        return null;
     }
 
     private static int getNextJobId(List<Job> jobs) {
@@ -410,28 +477,19 @@ public class Main {
                 } else if (c == '"') {
                     inDoubleQuotes = true;
 
-                } else if (c == '>') {
-
-                    boolean append = (i + 1 < input.length() && input.charAt(i + 1) == '>');
-                    if (append) i++;
+                } else if (c == '|' || c == '>') {
 
                     if (current.length() > 0) {
-
-                        String token = current.toString();
-
-                        if (token.equals("1")) {
-                            args.add(append ? "1>>" : "1>");
-                        } else if (token.equals("2")) {
-                            args.add(append ? "2>>" : "2>");
-                        }
-                        else {
-                            args.add(token);
-                            args.add(append ? ">>" : ">");
-                        }
-
+                        args.add(current.toString());
                         current.setLength(0);
+                    }
 
+                    if (c == '|') {
+                        args.add("|");
                     } else {
+                        boolean append = (i + 1 < input.length() && input.charAt(i + 1) == '>');
+                        if (append) i++;
+
                         args.add(append ? ">>" : ">");
                     }
 
