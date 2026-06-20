@@ -259,15 +259,26 @@ public class Main {
                     Process leftProcess = leftPb.start();
                     Process rightProcess = rightPb.start();
 
-                    new Thread(() -> {
+                    Thread pipeThread = new Thread(() -> {
                         try {
                             leftProcess.getInputStream().transferTo(rightProcess.getOutputStream());
-                            rightProcess.getOutputStream().close();
-                        } catch (Exception ignored) {}
-                    }).start();
+                        } catch (Exception ignored) {
+                        } finally {
+                            try {
+                                rightProcess.getOutputStream().close();
+                            } catch (Exception ignored) {}
+                        }
+                    });
 
-                    rightProcess.onExit().join();
-                    leftProcess.destroy();
+                    pipeThread.start();
+
+                    rightProcess.waitFor();
+
+                    if (leftProcess.isAlive()) {
+                        leftProcess.destroy();
+                    }
+
+                    pipeThread.join();
                     continue;
                 }
 
