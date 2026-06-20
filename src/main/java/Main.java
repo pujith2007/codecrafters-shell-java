@@ -39,8 +39,6 @@ public class Main {
 
             else if (input.equals("jobs") || input.startsWith("jobs ")) {
 
-                reapBackgroundJobs(backgroundJobs);
-
                 List<Job> stillRunning = new ArrayList<>();
 
                 int size = backgroundJobs.size();
@@ -418,16 +416,15 @@ public class Main {
                 isAlive = true;
             }
 
-            String marker;
-            if (i == size - 1) {
-                marker = "+";
-            } else if (i == size - 2) {
-                marker = "-";
-            } else {
-                marker = " ";
-            }
-
             if (!isAlive) {
+                String marker;
+                if (i == size - 1) {
+                    marker = "+";
+                } else if (i == size - 2) {
+                    marker = "-";
+                } else {
+                    marker = " ";
+                }
                 String status = "Done";
                 String padding = "                    ";
                 System.out.println("[" + job.jobId + "]" + marker + "  " + status + padding + job.commandLine);
