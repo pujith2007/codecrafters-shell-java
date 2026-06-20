@@ -8,6 +8,13 @@ import java.nio.file.Files;
 
 public class Main {
 
+    static class Job {
+        int jobId;
+        long pid;
+        Process process;
+        String commandLine;
+    }
+
     public static void main(String[] args) throws Exception {
 
         Scanner scanner = new Scanner(System.in);
@@ -16,11 +23,14 @@ public class Main {
 
         Path currentDirectory = Path.of(System.getProperty("user.dir"));
 
+        List<Job> backgroundJobs = new ArrayList<>();
+        int nextJobId = 1;
+
         while (true) {
 
             System.out.print("$ ");
 
-            String input = scanner.nextLine().trim();
+            String input = scanner.nextLine();
 
             if (input.equals("exit")) {
                 break;
@@ -106,7 +116,7 @@ public class Main {
 
             else if (input.startsWith("cd ")) {
 
-                String dirName = input.substring(3).trim();
+                String dirName = input.substring(3);
 
                 Path newPath;
 
@@ -129,11 +139,11 @@ public class Main {
 
             else if (input.startsWith("type ")) {
 
-                String command = input.substring(5).trim();
+                String command = input.substring(5);
 
                 if (builtins.contains(command)) {
                     System.out.println(command + " is a shell builtin");
-                } else {
+                                    } else {
 
                     String path = System.getenv("PATH");
                     String[] dirs = path.split(File.pathSeparator);
@@ -160,6 +170,12 @@ public class Main {
             else {
 
                 List<String> parsed = parseCommand(input);
+
+                boolean isBackground = false;
+                if (!parsed.isEmpty() && parsed.get(parsed.size() - 1).equals("&")) {
+                    isBackground = true;
+                    parsed.remove(parsed.size() - 1);
+                }
 
                 int redirectIndex = -1;
 
@@ -220,10 +236,12 @@ public class Main {
                         }
                         else if (operator.equals("2>>")) {
 
-                            pb.redirectError(ProcessBuilder.Redirect.appendTo(outFile));
-                            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+    pb.redirectError(ProcessBuilder.Redirect.appendTo(outFile));
+    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
 
-                        }
+}
+                        
+                        
                         else if (operator.equals(">") || operator.equals("1>")) {
 
                             pb.redirectOutput(outFile);
@@ -240,7 +258,19 @@ public class Main {
                     }
 
                     Process process = pb.start();
-                    process.waitFor();
+
+                    if (isBackground) {
+                        Job job = new Job();
+                        job.jobId = nextJobId++;
+                        job.pid = process.pid();
+                        job.process = process;
+                        job.commandLine = String.join(" ", commandArgs);
+                        backgroundJobs.add(job);
+
+                        System.out.println("[" + job.jobId + "] " + job.pid);
+                    } else {
+                        process.waitFor();
+                    }
 
                 } else {
                     System.out.println(command + ": command not found");
@@ -316,11 +346,11 @@ public class Main {
 
                         String token = current.toString();
 
-                        if (token.equals("1")) {
-                            args.add(append ? "1>>" : "1>");
-                        } else if (token.equals("2")) {
-                            args.add(append ? "2>>" : "2>");
-                        }
+                      if (token.equals("1")) {
+    args.add(append ? "1>>" : "1>");
+} else if (token.equals("2")) {
+    args.add(append ? "2>>" : "2>");
+}
                         else {
                             args.add(token);
                             args.add(append ? ">>" : ">");
