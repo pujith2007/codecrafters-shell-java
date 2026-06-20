@@ -37,6 +37,14 @@ public class Main {
             }
 
             else if (input.equals("jobs") || input.startsWith("jobs ")) {
+
+                for (Job job : backgroundJobs) {
+                    if (job.process.isAlive()) {
+                        String status = "Running";
+                        String padding = "                 ";
+                        System.out.println("[" + job.jobId + "]+  " + status + padding + job.commandLine);
+                    }
+                }
                 continue;
             }
 
@@ -143,7 +151,7 @@ public class Main {
 
                 if (builtins.contains(command)) {
                     System.out.println(command + " is a shell builtin");
-                                    } else {
+                } else {
 
                     String path = System.getenv("PATH");
                     String[] dirs = path.split(File.pathSeparator);
@@ -236,12 +244,10 @@ public class Main {
                         }
                         else if (operator.equals("2>>")) {
 
-    pb.redirectError(ProcessBuilder.Redirect.appendTo(outFile));
-    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                            pb.redirectError(ProcessBuilder.Redirect.appendTo(outFile));
+                            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
 
-}
-                        
-                        
+                        }
                         else if (operator.equals(">") || operator.equals("1>")) {
 
                             pb.redirectOutput(outFile);
@@ -346,11 +352,11 @@ public class Main {
 
                         String token = current.toString();
 
-                      if (token.equals("1")) {
-    args.add(append ? "1>>" : "1>");
-} else if (token.equals("2")) {
-    args.add(append ? "2>>" : "2>");
-}
+                        if (token.equals("1")) {
+                            args.add(append ? "1>>" : "1>");
+                        } else if (token.equals("2")) {
+                            args.add(append ? "2>>" : "2>");
+                        }
                         else {
                             args.add(token);
                             args.add(append ? ">>" : ">");
