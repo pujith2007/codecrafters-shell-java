@@ -8,7 +8,6 @@ import java.nio.file.Files;
 import java.io.*;
 
 public class Main {
-
     private static final Set<String> BUILTINS = Set.of("echo", "exit", "type", "pwd", "cd", "jobs");
 
     static class Job {
@@ -25,16 +24,12 @@ public class Main {
 
         while (true) {
             reapBackgroundJobs(backgroundJobs);
-
             System.out.print("$ ");
-
             String input = scanner.nextLine().trim();
             if (input.isEmpty()) continue;
-
             if (input.equals("exit")) break;
 
             List<String> parsed = parseCommand(input);
-
             int pipeIndex = -1;
             for (int i = 0; i < parsed.size(); i++) {
                 if (parsed.get(i).equals("|")) {
@@ -53,16 +48,13 @@ public class Main {
                 isBackground = true;
                 parsed.remove(parsed.size() - 1);
             }
-
             if (parsed.isEmpty()) continue;
 
             String command = parsed.get(0);
-
             if ("echo".equals(command)) {
                 handleEcho(parsed);
                 continue;
             }
-
             if (BUILTINS.contains(command)) {
                 executeBuiltin(parsed, null, System.out, currentDirectory);
                 continue;
@@ -76,13 +68,11 @@ public class Main {
 
             int redirectIndex = findRedirectIndex(parsed);
             List<String> commandArgs = getCommandArgs(parsed, redirectIndex);
-
             ProcessBuilder pb = new ProcessBuilder(commandArgs);
             pb.directory(currentDirectory.toFile());
             setupRedirects(pb, parsed, redirectIndex);
 
             Process process = pb.start();
-
             if (isBackground) {
                 Job job = new Job();
                 job.jobId = getNextJobId(backgroundJobs);
@@ -136,7 +126,6 @@ public class Main {
             // Builtin | External
             try (PipedOutputStream pos = new PipedOutputStream();
                  PipedInputStream pis = new PipedInputStream(pos)) {
-
                 Thread leftThread = new Thread(() -> {
                     try {
                         executeBuiltin(leftArgs, null, pos, currentDirectory);
@@ -176,7 +165,6 @@ public class Main {
             leftPb.directory(currentDirectory.toFile());
             leftPb.redirectOutput(ProcessBuilder.Redirect.PIPE);
             leftPb.redirectError(ProcessBuilder.Redirect.INHERIT);
-
             Process leftProcess = leftPb.start();
 
             Thread rightThread = new Thread(() -> {
@@ -189,7 +177,7 @@ public class Main {
             leftProcess.waitFor();
             rightThread.join();
         } else {
-            // External | External - Fixed for tail -f | head
+            // External | External
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
             leftPb.directory(currentDirectory.toFile());
@@ -203,6 +191,7 @@ public class Main {
             Process leftProcess = leftPb.start();
             Process rightProcess = rightPb.start();
 
+            // Copy left output to right input
             Thread copier = new Thread(() -> {
                 try {
                     leftProcess.getInputStream().transferTo(rightProcess.getOutputStream());
@@ -213,14 +202,11 @@ public class Main {
             });
             copier.start();
 
-            // Wait for head to finish
+            // Wait for right side (head) to finish, then kill left side (tail -f)
             rightProcess.waitFor();
-
-            // Kill tail -f
             if (leftProcess.isAlive()) {
                 leftProcess.destroyForcibly();
             }
-
             copier.join();
         }
     }
@@ -305,7 +291,7 @@ public class Main {
             if (isAlive(job.process)) {
                 stillRunning.add(job);
             } else {
-                System.out.println("[" + job.jobId + "]+  Done                    " + job.commandLine);
+                System.out.println("[" + job.jobId + "]+ Done " + job.commandLine);
             }
         }
         backgroundJobs.clear();
