@@ -24,7 +24,6 @@ public class Main {
         Path currentDirectory = Path.of(System.getProperty("user.dir"));
 
         List<Job> backgroundJobs = new ArrayList<>();
-        int nextJobId = 1;
 
         while (true) {
 
@@ -292,7 +291,7 @@ public class Main {
 
                     if (isBackground) {
                         Job job = new Job();
-                        job.jobId = nextJobId++;
+                        job.jobId = getNextJobId(backgroundJobs);
                         job.pid = process.pid();
                         job.process = process;
                         job.commandLine = String.join(" ", commandArgs);
@@ -308,6 +307,19 @@ public class Main {
                 }
             }
         }
+    }
+
+    private static int getNextJobId(List<Job> jobs) {
+        if (jobs.isEmpty()) {
+            return 1;
+        }
+        int max = 0;
+        for (Job job : jobs) {
+            if (job.jobId > max) {
+                max = job.jobId;
+            }
+        }
+        return max + 1;
     }
 
     private static void reapBackgroundJobs(List<Job> backgroundJobs) {
