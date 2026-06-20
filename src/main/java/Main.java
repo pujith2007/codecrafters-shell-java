@@ -41,9 +41,7 @@ public class Main {
             }
 
             else if (input.equals("jobs") || input.startsWith("jobs ")) {
-
                 List<Job> stillRunning = new ArrayList<>();
-
                 int size = backgroundJobs.size();
                 for (int i = 0; i < size; i++) {
                     Job job = backgroundJobs.get(i);
@@ -56,91 +54,57 @@ public class Main {
                         isAlive = true;
                     }
 
-                    String marker;
-                    if (i == size - 1) {
-                        marker = "+";
-                    } else if (i == size - 2) {
-                        marker = "-";
-                    } else {
-                        marker = " ";
-                    }
+                    String marker = (i == size - 1) ? "+" : (i == size - 2) ? "-" : " ";
 
                     if (isAlive) {
-                        String status = "Running";
-                        String padding = "                 ";
-                        System.out.println("[" + job.jobId + "]" + marker + "  " + status + padding + job.commandLine + " &");
+                        System.out.println("[" + job.jobId + "]" + marker + "  Running                 " + job.commandLine + " &");
                         stillRunning.add(job);
                     } else {
-                        String status = "Done";
-                        String padding = "                    ";
-                        System.out.println("[" + job.jobId + "]" + marker + "  " + status + padding + job.commandLine);
+                        System.out.println("[" + job.jobId + "]" + marker + "  Done                    " + job.commandLine);
                     }
                 }
-
                 backgroundJobs.clear();
                 backgroundJobs.addAll(stillRunning);
                 continue;
             }
 
             else if (input.startsWith("echo ")) {
-
                 List<String> parsed = parseCommand(input);
-
                 int redirectIndex = -1;
-
                 for (int i = 0; i < parsed.size(); i++) {
-                    if (parsed.get(i).equals(">")
-                        || parsed.get(i).equals("1>")
-                        || parsed.get(i).equals("2>")
-                        || parsed.get(i).equals("2>>")
-                        || parsed.get(i).equals(">>")
-                        || parsed.get(i).equals("1>>")) {
+                    if (parsed.get(i).equals(">") || parsed.get(i).equals("1>") ||
+                        parsed.get(i).equals("2>") || parsed.get(i).equals("2>>") ||
+                        parsed.get(i).equals(">>") || parsed.get(i).equals("1>>")) {
                         redirectIndex = i;
                         break;
                     }
                 }
 
                 StringBuilder output = new StringBuilder();
-
                 int end = (redirectIndex == -1) ? parsed.size() : redirectIndex;
-
                 for (int i = 1; i < end; i++) {
                     if (i > 1) output.append(" ");
                     output.append(parsed.get(i));
                 }
 
                 if (redirectIndex != -1) {
-
                     String operator = parsed.get(redirectIndex);
                     String fileName = parsed.get(redirectIndex + 1);
-
                     Path filePath = Path.of(fileName);
                     Files.createDirectories(filePath.toAbsolutePath().getParent());
 
-                    if (operator.equals("2>")) {
-                        Files.writeString(filePath, "");
-                        System.out.println(output);
-                    } else if (operator.equals("2>>")) {
-                        Files.writeString(
-                                filePath,
-                                "",
-                                java.nio.file.StandardOpenOption.CREATE,
-                                java.nio.file.StandardOpenOption.APPEND);
+                    if (operator.equals("2>") || operator.equals("2>>")) {
+                        Files.writeString(filePath, "", java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
                         System.out.println(output);
                     } else if (operator.equals(">") || operator.equals("1>")) {
-                        Files.writeString(filePath,
-                                output.toString() + System.lineSeparator());
+                        Files.writeString(filePath, output.toString() + System.lineSeparator());
                     } else if (operator.equals(">>") || operator.equals("1>>")) {
-                        Files.writeString(filePath,
-                                output.toString() + System.lineSeparator(),
-                                java.nio.file.StandardOpenOption.CREATE,
-                                java.nio.file.StandardOpenOption.APPEND);
+                        Files.writeString(filePath, output.toString() + System.lineSeparator(),
+                                java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
                     }
-
                 } else {
                     System.out.println(output);
                 }
-
             }
 
             else if (input.equals("pwd")) {
@@ -204,12 +168,9 @@ public class Main {
                 // Non-pipe command
                 int redirectIndex = -1;
                 for (int i = 0; i < parsed.size(); i++) {
-                    if (parsed.get(i).equals(">")
-                            || parsed.get(i).equals("2>>")
-                            || parsed.get(i).equals("1>")
-                            || parsed.get(i).equals("2>")
-                            || parsed.get(i).equals(">>")
-                            || parsed.get(i).equals("1>>")) {
+                    if (parsed.get(i).equals(">") || parsed.get(i).equals("2>>") ||
+                        parsed.get(i).equals("1>") || parsed.get(i).equals("2>") ||
+                        parsed.get(i).equals(">>") || parsed.get(i).equals("1>>")) {
                         redirectIndex = i;
                         break;
                     }
@@ -287,12 +248,8 @@ public class Main {
         List<String> leftArgs = new ArrayList<>();
         List<String> rightArgs = new ArrayList<>();
 
-        for (int i = 0; i < pipeIndex; i++) {
-            leftArgs.add(parsed.get(i));
-        }
-        for (int i = pipeIndex + 1; i < parsed.size(); i++) {
-            rightArgs.add(parsed.get(i));
-        }
+        for (int i = 0; i < pipeIndex; i++) leftArgs.add(parsed.get(i));
+        for (int i = pipeIndex + 1; i < parsed.size(); i++) rightArgs.add(parsed.get(i));
 
         if (leftArgs.isEmpty() || rightArgs.isEmpty()) {
             System.out.println("parse error: near `|'");
@@ -321,7 +278,7 @@ public class Main {
         }
 
         if (leftIsBuiltin) {
-            // Builtin | external
+            // Builtin | External
             try (PipedOutputStream pos = new PipedOutputStream();
                  PipedInputStream pis = new PipedInputStream(pos)) {
 
@@ -337,17 +294,34 @@ public class Main {
 
                 ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
                 rightPb.directory(currentDirectory.toFile());
-                rightPb.redirectInput(pis);
+                rightPb.redirectInput(ProcessBuilder.Redirect.PIPE);   // Fixed
                 rightPb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                 rightPb.redirectError(ProcessBuilder.Redirect.INHERIT);
 
                 Process rightProcess = rightPb.start();
 
+                // Copy data from builtin output to right process stdin
+                Thread pipeThread = new Thread(() -> {
+                    try {
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = pis.read(buffer)) != -1) {
+                            rightProcess.getOutputStream().write(buffer, 0, len);
+                            rightProcess.getOutputStream().flush();
+                        }
+                    } catch (Exception ignored) {}
+                    finally {
+                        try { rightProcess.getOutputStream().close(); } catch (Exception ignored) {}
+                    }
+                });
+                pipeThread.start();
+
                 rightProcess.waitFor();
                 leftThread.join();
+                pipeThread.join();
             }
         } else if (rightIsBuiltin) {
-            // external | builtin
+            // External | Builtin
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             leftPb.directory(currentDirectory.toFile());
             leftPb.redirectOutput(ProcessBuilder.Redirect.PIPE);
@@ -365,7 +339,7 @@ public class Main {
             leftProcess.waitFor();
             rightThread.join();
         } else {
-            // external | external
+            // External | External
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
 
@@ -390,18 +364,13 @@ public class Main {
                     }
                 } catch (Exception ignored) {}
                 finally {
-                    try {
-                        rightProcess.getOutputStream().close();
-                    } catch (Exception ignored) {}
+                    try { rightProcess.getOutputStream().close(); } catch (Exception ignored) {}
                 }
             });
             pipeThread.start();
 
             rightProcess.waitFor();
-
-            if (leftProcess.isAlive()) {
-                leftProcess.destroy();
-            }
+            if (leftProcess.isAlive()) leftProcess.destroy();
             pipeThread.join();
         }
     }
@@ -434,18 +403,14 @@ public class Main {
                     }
                 }
             }
-            // Consume stdin when used in pipeline (e.g. ls | type ...)
+            // Consume stdin for cases like "ls | type ..."
             if (stdin != null) {
                 try {
                     byte[] buffer = new byte[8192];
                     int len;
-                    while ((len = stdin.read(buffer)) != -1) {
-                        // discard input
-                    }
+                    while ((len = stdin.read(buffer)) != -1) {}
                 } catch (Exception ignored) {}
             }
-        } else if ("cd".equals(cmd) || "jobs".equals(cmd) || "exit".equals(cmd)) {
-            // Not supported in pipelines
         }
 
         out.flush();
@@ -475,11 +440,9 @@ public class Main {
 
     private static void reapBackgroundJobs(List<Job> backgroundJobs) {
         List<Job> stillRunning = new ArrayList<>();
-
         int size = backgroundJobs.size();
         for (int i = 0; i < size; i++) {
             Job job = backgroundJobs.get(i);
-
             boolean isAlive;
             try {
                 job.process.exitValue();
@@ -490,14 +453,11 @@ public class Main {
 
             if (!isAlive) {
                 String marker = (i == size - 1) ? "+" : (i == size - 2) ? "-" : " ";
-                String status = "Done";
-                String padding = "                    ";
-                System.out.println("[" + job.jobId + "]" + marker + "  " + status + padding + job.commandLine);
+                System.out.println("[" + job.jobId + "]" + marker + "  Done                    " + job.commandLine);
             } else {
                 stillRunning.add(job);
             }
         }
-
         backgroundJobs.clear();
         backgroundJobs.addAll(stillRunning);
     }
@@ -515,32 +475,21 @@ public class Main {
             if (inSingleQuotes) {
                 if (c == '\'') inSingleQuotes = false;
                 else current.append(c);
-            }
-            else if (inDoubleQuotes) {
-                if (c == '\\') {
-                    if (i + 1 < input.length()) {
-                        char next = input.charAt(i + 1);
-                        if (next == '"' || next == '\\') {
-                            current.append(next);
-                            i++;
-                        } else {
-                            current.append(c);
-                            current.append(next);
-                            i++;
-                        }
-                    }
+            } else if (inDoubleQuotes) {
+                if (c == '\\' && i + 1 < input.length()) {
+                    char next = input.charAt(i + 1);
+                    if (next == '"' || next == '\\') current.append(next);
+                    else current.append(c).append(next);
+                    i++;
                 } else if (c == '"') {
                     inDoubleQuotes = false;
                 } else {
                     current.append(c);
                 }
-            }
-            else {
-                if (c == '\\') {
-                    if (i + 1 < input.length()) {
-                        current.append(input.charAt(i + 1));
-                        i++;
-                    }
+            } else {
+                if (c == '\\' && i + 1 < input.length()) {
+                    current.append(input.charAt(i + 1));
+                    i++;
                 } else if (c == '\'') {
                     inSingleQuotes = true;
                 } else if (c == '"') {
@@ -568,10 +517,7 @@ public class Main {
             }
         }
 
-        if (current.length() > 0) {
-            args.add(current.toString());
-        }
-
+        if (current.length() > 0) args.add(current.toString());
         return args;
     }
 }
