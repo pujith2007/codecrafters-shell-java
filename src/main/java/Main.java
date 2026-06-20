@@ -34,11 +34,11 @@ public class Main {
 
                 for (int i = 0; i < parsed.size(); i++) {
                     if (parsed.get(i).equals(">")
-        || parsed.get(i).equals("1>")
-        || parsed.get(i).equals("2>")
-        || parsed.get(i).equals("2>>")
-        || parsed.get(i).equals(">>")
-        || parsed.get(i).equals("1>>"))
+                        || parsed.get(i).equals("1>")
+                        || parsed.get(i).equals("2>")
+                        || parsed.get(i).equals("2>>")
+                        || parsed.get(i).equals(">>")
+                        || parsed.get(i).equals("1>>")) {
                         redirectIndex = i;
                         break;
                     }
@@ -65,19 +65,16 @@ public class Main {
 
                         Files.writeString(filePath, "");
                         System.out.println(output);
-                    }
-                        else if (operator.equals("2>>")) {
+                    } else if (operator.equals("2>>")) {
 
-    Files.writeString(
-            filePath,
-            "",
-            java.nio.file.StandardOpenOption.CREATE,
-            java.nio.file.StandardOpenOption.APPEND);
+                        Files.writeString(
+                                filePath,
+                                "",
+                                java.nio.file.StandardOpenOption.CREATE,
+                                java.nio.file.StandardOpenOption.APPEND);
 
-    System.out.println(output);
-}
-
-                     else if (operator.equals(">") || operator.equals("1>")) {
+                        System.out.println(output);
+                    } else if (operator.equals(">") || operator.equals("1>")) {
 
                         Files.writeString(filePath,
                                 output.toString() + System.lineSeparator());
@@ -132,7 +129,7 @@ public class Main {
 
                 if (builtins.contains(command)) {
                     System.out.println(command + " is a shell builtin");
-                                    } else {
+                } else {
 
                     String path = System.getenv("PATH");
                     String[] dirs = path.split(File.pathSeparator);
@@ -219,12 +216,10 @@ public class Main {
                         }
                         else if (operator.equals("2>>")) {
 
-    pb.redirectError(ProcessBuilder.Redirect.appendTo(outFile));
-    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                            pb.redirectError(ProcessBuilder.Redirect.appendTo(outFile));
+                            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
 
-}
-                        
-                        
+                        }
                         else if (operator.equals(">") || operator.equals("1>")) {
 
                             pb.redirectOutput(outFile);
