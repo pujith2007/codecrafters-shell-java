@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.ArrayList;
 import java.io.File;
 import java.nio.file.Path;
-import java.nio.file.Files;
 import java.io.*;
 
 public class Main {
@@ -126,6 +125,7 @@ public class Main {
             // Builtin | External
             try (PipedOutputStream pos = new PipedOutputStream();
                  PipedInputStream pis = new PipedInputStream(pos)) {
+
                 Thread leftThread = new Thread(() -> {
                     try {
                         executeBuiltin(leftArgs, null, pos, currentDirectory);
@@ -142,17 +142,7 @@ public class Main {
 
                 Process rightProcess = rightPb.start();
 
-                Thread copier = new Thread(() -> {
-                    try (OutputStream rightIn = rightProcess.getOutputStream()) {
-                        byte[] buf = new byte[8192];
-                        int len;
-                        while ((len = pis.read(buf)) != -1) {
-                            rightIn.write(buf, 0, len);
-                            rightIn.flush();
-                        }
-                    } catch (Exception ignored) {}
-                    finally { try { rightProcess.getOutputStream().close(); } catch (Exception ignored) {} }
-                });
+                Thread copier = new Thread(() -> copyStream(pis, rightProcess.getOutputStream()));
                 copier.start();
 
                 rightProcess.waitFor();
@@ -177,7 +167,7 @@ public class Main {
             leftProcess.waitFor();
             rightThread.join();
         } else {
-            // External | External
+            // External | External - Improved for tail -f | head
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
             leftPb.directory(currentDirectory.toFile());
@@ -191,23 +181,31 @@ public class Main {
             Process leftProcess = leftPb.start();
             Process rightProcess = rightPb.start();
 
-            // Copy left output to right input
-            Thread copier = new Thread(() -> {
-                try {
-                    leftProcess.getInputStream().transferTo(rightProcess.getOutputStream());
-                } catch (Exception ignored) {}
-                finally {
-                    try { rightProcess.getOutputStream().close(); } catch (Exception ignored) {}
-                }
-            });
+            Thread copier = new Thread(() -> copyStream(leftProcess.getInputStream(), rightProcess.getOutputStream()));
             copier.start();
 
-            // Wait for right side (head) to finish, then kill left side (tail -f)
+            // Wait for right side to finish (head), then kill left side (tail -f)
             rightProcess.waitFor();
+
             if (leftProcess.isAlive()) {
                 leftProcess.destroyForcibly();
             }
-            copier.join();
+
+            copier.join(1000); // Give copier a moment to finish
+        }
+    }
+
+    // Helper to safely copy stream
+    private static void copyStream(InputStream in, OutputStream out) {
+        try (InputStream input = in; OutputStream output = out) {
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = input.read(buf)) != -1) {
+                output.write(buf, 0, len);
+                output.flush();
+            }
+        } catch (Exception ignored) {
+            // Pipe closed or process killed - normal in tail -f case
         }
     }
 
@@ -236,9 +234,9 @@ public class Main {
         }
 
         if (stdin != null) {
-            try {
+            try (InputStream is = stdin) {
                 byte[] buf = new byte[8192];
-                while (stdin.read(buf) != -1) {}
+                while (is.read(buf) != -1) {}
             } catch (Exception ignored) {}
         }
         out.flush();
