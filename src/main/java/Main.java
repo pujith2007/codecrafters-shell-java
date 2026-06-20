@@ -37,12 +37,21 @@ public class Main {
             }
 
             else if (input.equals("jobs") || input.startsWith("jobs ")) {
-
-                for (Job job : backgroundJobs) {
+                int size = backgroundJobs.size();
+                for (int i = 0; i < size; i++) {
+                    Job job = backgroundJobs.get(i);
                     if (job.process.isAlive()) {
+                        String marker;
+                        if (i == size - 1) {
+                            marker = "+";
+                        } else if (i == size - 2) {
+                            marker = "-";
+                        } else {
+                            marker = " ";
+                        }
                         String status = "Running";
                         String padding = "                 ";
-                        System.out.println("[" + job.jobId + "]+  " + status + padding + job.commandLine);
+                        System.out.println("[" + job.jobId + "]" + marker + "  " + status + padding + job.commandLine);
                     }
                 }
                 continue;
