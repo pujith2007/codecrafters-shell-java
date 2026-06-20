@@ -55,7 +55,7 @@ public class Main {
                 continue;
             }
             if (BUILTINS.contains(command)) {
-                executeBuiltin(parsed, null, System.out, currentDirectory);
+                executeBuiltin(parsed, null, System.out, currentDirectory, backgroundJobs);
                 continue;
             }
 
@@ -122,13 +122,12 @@ public class Main {
         }
 
         if (leftBuiltin) {
-            // Builtin | External
             try (PipedOutputStream pos = new PipedOutputStream();
                  PipedInputStream pis = new PipedInputStream(pos)) {
 
                 Thread leftThread = new Thread(() -> {
                     try {
-                        executeBuiltin(leftArgs, null, pos, currentDirectory);
+                        executeBuiltin(leftArgs, null, pos, currentDirectory, null);
                     } catch (Exception ignored) {}
                     finally { try { pos.close(); } catch (Exception ignored) {} }
                 });
@@ -150,7 +149,6 @@ public class Main {
                 copier.join();
             }
         } else if (rightBuiltin) {
-            // External | Builtin
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             leftPb.directory(currentDirectory.toFile());
             leftPb.redirectOutput(ProcessBuilder.Redirect.PIPE);
@@ -159,7 +157,7 @@ public class Main {
 
             Thread rightThread = new Thread(() -> {
                 try {
-                    executeBuiltin(rightArgs, leftProcess.getInputStream(), System.out, currentDirectory);
+                    executeBuiltin(rightArgs, leftProcess.getInputStream(), System.out, currentDirectory, null);
                 } catch (Exception ignored) {}
             });
             rightThread.start();
@@ -167,7 +165,6 @@ public class Main {
             leftProcess.waitFor();
             rightThread.join();
         } else {
-            // External | External - Improved for tail -f | head
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
             leftPb.directory(currentDirectory.toFile());
@@ -184,32 +181,16 @@ public class Main {
             Thread copier = new Thread(() -> copyStream(leftProcess.getInputStream(), rightProcess.getOutputStream()));
             copier.start();
 
-            // Wait for right side to finish (head), then kill left side (tail -f)
             rightProcess.waitFor();
-
             if (leftProcess.isAlive()) {
                 leftProcess.destroyForcibly();
             }
-
-            copier.join(1000); // Give copier a moment to finish
+            copier.join(1000);
         }
     }
 
-    // Helper to safely copy stream
-    private static void copyStream(InputStream in, OutputStream out) {
-        try (InputStream input = in; OutputStream output = out) {
-            byte[] buf = new byte[8192];
-            int len;
-            while ((len = input.read(buf)) != -1) {
-                output.write(buf, 0, len);
-                output.flush();
-            }
-        } catch (Exception ignored) {
-            // Pipe closed or process killed - normal in tail -f case
-        }
-    }
-
-    private static void executeBuiltin(List<String> args, InputStream stdin, OutputStream stdout, Path currentDirectory) throws Exception {
+    private static void executeBuiltin(List<String> args, InputStream stdin, OutputStream stdout, 
+                                       Path currentDirectory, List<Job> backgroundJobs) throws Exception {
         if (args.isEmpty()) return;
         String cmd = args.get(0);
         PrintStream out = stdout != null ? new PrintStream(stdout) : System.out;
@@ -231,6 +212,14 @@ public class Main {
                 File exec = findExecutable(target);
                 out.println(exec != null ? target + " is " + exec.getAbsolutePath() : target + ": not found");
             }
+        } else if ("jobs".equals(cmd)) {
+            if (backgroundJobs != null) {
+                for (Job job : backgroundJobs) {
+                    if (isAlive(job.process)) {
+                        out.println("[" + job.jobId + "]+ Running " + job.commandLine);
+                    }
+                }
+            }
         }
 
         if (stdin != null) {
@@ -240,6 +229,17 @@ public class Main {
             } catch (Exception ignored) {}
         }
         out.flush();
+    }
+
+    private static void copyStream(InputStream in, OutputStream out) {
+        try (InputStream input = in; OutputStream output = out) {
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = input.read(buf)) != -1) {
+                output.write(buf, 0, len);
+                output.flush();
+            }
+        } catch (Exception ignored) {}
     }
 
     private static int findRedirectIndex(List<String> parsed) {
