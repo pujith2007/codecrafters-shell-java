@@ -37,23 +37,28 @@ public class Main {
             }
 
             else if (input.equals("jobs") || input.startsWith("jobs ")) {
+
+                List<Job> stillRunning = new ArrayList<>();
+
                 int size = backgroundJobs.size();
                 for (int i = 0; i < size; i++) {
                     Job job = backgroundJobs.get(i);
                     if (job.process.isAlive()) {
-                        String marker;
-                        if (i == size - 1) {
-                            marker = "+";
-                        } else if (i == size - 2) {
-                            marker = "-";
-                        } else {
-                            marker = " ";
-                        }
+                        String marker = (i == size - 1) ? "+" : (i == size - 2) ? "-" : " ";
                         String status = "Running";
                         String padding = "                 ";
+                        System.out.println("[" + job.jobId + "]" + marker + "  " + status + padding + job.commandLine + " &");
+                        stillRunning.add(job);
+                    } else {
+                        String marker = (i == size - 1) ? "+" : (i == size - 2) ? "-" : " ";
+                        String status = "Done";
+                        String padding = "                    ";
                         System.out.println("[" + job.jobId + "]" + marker + "  " + status + padding + job.commandLine);
                     }
                 }
+
+                backgroundJobs.clear();
+                backgroundJobs.addAll(stillRunning);
                 continue;
             }
 
