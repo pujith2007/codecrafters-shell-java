@@ -260,9 +260,9 @@ public class Main {
                     Process rightProcess = rightPb.start();
 
                     new Thread(() -> {
-                        try {
-                            leftProcess.getInputStream().transferTo(rightProcess.getOutputStream());
-                            rightProcess.getOutputStream().close();
+                        try (var in = leftProcess.getInputStream();
+                             var out = rightProcess.getOutputStream()) {
+                            in.transferTo(out);
                         } catch (Exception ignored) {}
                     }).start();
 
@@ -275,8 +275,8 @@ public class Main {
                         backgroundJobs.add(job);
                         System.out.println("[" + job.jobId + "] " + job.pid);
                     } else {
-                        leftProcess.onExit().join();
                         rightProcess.onExit().join();
+                        leftProcess.destroy();
                     }
                     continue;
                 }
