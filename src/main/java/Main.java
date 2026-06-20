@@ -14,6 +14,7 @@ public class Main {
         long pid;
         Process process;
         String commandLine;
+        boolean isRunning;
     }
 
     public static void main(String[] args) throws Exception {
@@ -37,7 +38,6 @@ public class Main {
                 continue;
             }
 
-            // Handle background job
             boolean isBackground = false;
             if (!parsed.isEmpty() && parsed.get(parsed.size() - 1).equals("&")) {
                 isBackground = true;
@@ -78,6 +78,7 @@ public class Main {
                 job.pid = process.pid();
                 job.process = process;
                 job.commandLine = String.join(" ", commandArgs);
+                job.isRunning = true;
                 backgroundJobs.add(job);
                 System.out.println("[" + job.jobId + "] " + job.pid);
             } else {
@@ -88,14 +89,13 @@ public class Main {
 
     private static int findPipeIndex(List<String> parsed) {
         for (int i = 0; i < parsed.size(); i++) {
-            if (parsed.get(i).equals("|")) {
-                return i;
-            }
+            if (parsed.get(i).equals("|")) return i;
         }
         return -1;
     }
 
     private static void handlePipeline(List<String> parsed, int pipeIndex, Path currentDirectory) throws Exception {
+        // ... (unchanged - keeping the same pipeline logic as before)
         List<String> leftArgs = parsed.subList(0, pipeIndex);
         List<String> rightArgs = parsed.subList(pipeIndex + 1, parsed.size());
 
@@ -124,19 +124,15 @@ public class Main {
                  PipedInputStream pis = new PipedInputStream(pos)) {
 
                 Thread leftThread = new Thread(() -> {
-                    try {
-                        executeBuiltin(leftArgs, null, pos, currentDirectory, null);
-                    } catch (Exception ignored) {}
-                    finally {
-                        try { pos.close(); } catch (Exception ignored) {}
-                    }
+                    try { executeBuiltin(leftArgs, null, pos, currentDirectory, null); }
+                    catch (Exception ignored) {}
+                    finally { try { pos.close(); } catch (Exception ignored) {} }
                 });
                 leftThread.start();
 
                 Thread rightThread = new Thread(() -> {
-                    try {
-                        executeBuiltin(rightArgs, pis, System.out, currentDirectory, null);
-                    } catch (Exception ignored) {}
+                    try { executeBuiltin(rightArgs, pis, System.out, currentDirectory, null); }
+                    catch (Exception ignored) {}
                 });
                 rightThread.start();
 
@@ -148,12 +144,9 @@ public class Main {
                  PipedInputStream pis = new PipedInputStream(pos)) {
 
                 Thread leftThread = new Thread(() -> {
-                    try {
-                        executeBuiltin(leftArgs, null, pos, currentDirectory, null);
-                    } catch (Exception ignored) {}
-                    finally {
-                        try { pos.close(); } catch (Exception ignored) {}
-                    }
+                    try { executeBuiltin(leftArgs, null, pos, currentDirectory, null); }
+                    catch (Exception ignored) {}
+                    finally { try { pos.close(); } catch (Exception ignored) {} }
                 });
                 leftThread.start();
 
@@ -181,9 +174,8 @@ public class Main {
             Process leftProcess = leftPb.start();
 
             Thread rightThread = new Thread(() -> {
-                try {
-                    executeBuiltin(rightArgs, leftProcess.getInputStream(), System.out, currentDirectory, null);
-                } catch (Exception ignored) {}
+                try { executeBuiltin(rightArgs, leftProcess.getInputStream(), System.out, currentDirectory, null); }
+                catch (Exception ignored) {}
             });
             rightThread.start();
 
@@ -232,15 +224,7 @@ public class Main {
                     }
                 }
             }
-            case "jobs" -> {
-                if (backgroundJobs != null) {
-                    for (Job job : backgroundJobs) {
-                        if (isAlive(job.process)) {
-                            out.println("[" + job.jobId + "]+ Running " + job.commandLine);
-                        }
-                    }
-                }
-            }
+            case "jobs" -> printJobs(backgroundJobs, out);
         }
 
         if (stdin != null) {
@@ -251,6 +235,23 @@ public class Main {
         }
 
         out.flush();
+    }
+
+    private static void printJobs(List<Job> jobs, PrintStream out) {
+        if (jobs.isEmpty()) return;
+
+        for (int i = 0; i < jobs.size(); i++) {
+            Job job = jobs.get(i);
+            if (!isAlive(job.process)) continue;
+
+            String marker = (i == jobs.size() - 1) ? "+" : "-";
+            String cmd = job.commandLine;
+            // Add & if not already present (some tests expect it)
+            if (!cmd.trim().endsWith("&")) {
+                cmd += " &";
+            }
+            out.println("[" + job.jobId + "]" + marker + " Running " + cmd);
+        }
     }
 
     private static void handleEcho(List<String> parsed, PrintStream out) {
