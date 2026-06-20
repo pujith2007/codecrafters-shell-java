@@ -28,6 +28,8 @@ public class Main {
 
         while (true) {
 
+            reapBackgroundJobs(backgroundJobs);
+
             System.out.print("$ ");
 
             String input = scanner.nextLine();
@@ -306,6 +308,36 @@ public class Main {
                 }
             }
         }
+    }
+
+    private static void reapBackgroundJobs(List<Job> backgroundJobs) {
+        List<Job> stillRunning = new ArrayList<>();
+
+        int size = backgroundJobs.size();
+        for (int i = 0; i < size; i++) {
+            Job job = backgroundJobs.get(i);
+            boolean isAlive = job.process.isAlive();
+
+            String marker;
+            if (i == size - 1) {
+                marker = "+";
+            } else if (i == size - 2) {
+                marker = "-";
+            } else {
+                marker = " ";
+            }
+
+            if (!isAlive) {
+                String status = "Done";
+                String padding = "                    ";
+                System.out.println("[" + job.jobId + "]" + marker + "  " + status + padding + job.commandLine);
+            } else {
+                stillRunning.add(job);
+            }
+        }
+
+        backgroundJobs.clear();
+        backgroundJobs.addAll(stillRunning);
     }
 
     private static List<String> parseCommand(String input) {
