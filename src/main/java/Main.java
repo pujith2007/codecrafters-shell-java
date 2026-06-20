@@ -1,4 +1,4 @@
-import java.util.Scanner;
+ import java.util.Scanner;
 import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
@@ -31,10 +31,13 @@ public class Main {
             String input = scanner.nextLine().trim();
             if (input.isEmpty()) continue;
 
-            if (input.equals("exit")) break;
+            if (input.equals("exit")) {
+                break;
+            }
 
             List<String> parsed = parseCommand(input);
 
+            // Pipeline detection - highest priority
             int pipeIndex = -1;
             for (int i = 0; i < parsed.size(); i++) {
                 if (parsed.get(i).equals("|")) {
@@ -48,6 +51,7 @@ public class Main {
                 continue;
             }
 
+            // Background job
             boolean isBackground = false;
             if (!parsed.isEmpty() && parsed.get(parsed.size() - 1).equals("&")) {
                 isBackground = true;
@@ -58,16 +62,19 @@ public class Main {
 
             String command = parsed.get(0);
 
+            // Special echo (non-pipeline)
             if ("echo".equals(command)) {
                 handleEcho(parsed);
                 continue;
             }
 
+            // Other built-ins
             if (BUILTINS.contains(command)) {
                 executeBuiltin(parsed, null, System.out, currentDirectory);
                 continue;
             }
 
+            // External command
             File executable = findExecutable(command);
             if (executable == null) {
                 System.out.println(command + ": command not found");
@@ -120,26 +127,27 @@ public class Main {
         String leftCmd = leftArgs.get(0);
         String rightCmd = rightArgs.get(0);
 
-        boolean leftIsBuiltin = BUILTINS.contains(leftCmd);
-        boolean rightIsBuiltin = BUILTINS.contains(rightCmd);
+        boolean leftBuiltin = BUILTINS.contains(leftCmd);
+        boolean rightBuiltin = BUILTINS.contains(rightCmd);
 
-        if (!leftIsBuiltin && findExecutable(leftCmd) == null) {
+        if (!leftBuiltin && findExecutable(leftCmd) == null) {
             System.out.println(leftCmd + ": command not found");
             return;
         }
-        if (!rightIsBuiltin && findExecutable(rightCmd) == null) {
+        if (!rightBuiltin && findExecutable(rightCmd) == null) {
             System.out.println(rightCmd + ": command not found");
             return;
         }
 
-        if (leftIsBuiltin) {
+        if (leftBuiltin) {
             // Builtin | External
             try (PipedOutputStream pos = new PipedOutputStream();
                  PipedInputStream pis = new PipedInputStream(pos)) {
 
                 Thread leftThread = new Thread(() -> {
-                    try { executeBuiltin(leftArgs, null, pos, currentDirectory); }
-                    catch (Exception ignored) {}
+                    try {
+                        executeBuiltin(leftArgs, null, pos, currentDirectory);
+                    } catch (Exception ignored) {}
                     finally { try { pos.close(); } catch (Exception ignored) {} }
                 });
                 leftThread.start();
@@ -153,12 +161,12 @@ public class Main {
                 Process rightProcess = rightPb.start();
 
                 Thread copier = new Thread(() -> {
-                    try (OutputStream rightIn = rightProcess.getOutputStream()) {
+                    try (OutputStream out = rightProcess.getOutputStream()) {
                         byte[] buf = new byte[8192];
                         int len;
                         while ((len = pis.read(buf)) != -1) {
-                            rightIn.write(buf, 0, len);
-                            rightIn.flush();
+                            out.write(buf, 0, len);
+                            out.flush();
                         }
                     } catch (Exception ignored) {}
                     finally { try { rightProcess.getOutputStream().close(); } catch (Exception ignored) {} }
@@ -169,7 +177,7 @@ public class Main {
                 leftThread.join();
                 copier.join();
             }
-        } else if (rightIsBuiltin) {
+        } else if (rightBuiltin) {
             // External | Builtin
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             leftPb.directory(currentDirectory.toFile());
@@ -179,15 +187,16 @@ public class Main {
             Process leftProcess = leftPb.start();
 
             Thread rightThread = new Thread(() -> {
-                try { executeBuiltin(rightArgs, leftProcess.getInputStream(), System.out, currentDirectory); }
-                catch (Exception ignored) {}
+                try {
+                    executeBuiltin(rightArgs, leftProcess.getInputStream(), System.out, currentDirectory);
+                } catch (Exception ignored) {}
             });
             rightThread.start();
 
             leftProcess.waitFor();
             rightThread.join();
         } else {
-            // External | External - Critical fix for tail -f | head
+            // External | External - Fixed for tail -f | head
             ProcessBuilder leftPb = new ProcessBuilder(leftArgs);
             ProcessBuilder rightPb = new ProcessBuilder(rightArgs);
             leftPb.directory(currentDirectory.toFile());
@@ -211,14 +220,10 @@ public class Main {
             });
             copier.start();
 
-            // Wait for RIGHT side (head) to finish
-            rightProcess.waitFor();
-
-            // Kill left side (tail -f) if still running
+            rightProcess.waitFor();   // head finishes
             if (leftProcess.isAlive()) {
                 leftProcess.destroy();
             }
-
             copier.join();
         }
     }
@@ -248,7 +253,7 @@ public class Main {
         }
 
         if (stdin != null) {
-            try (stdin) {
+            try {
                 byte[] buf = new byte[8192];
                 while (stdin.read(buf) != -1) {}
             } catch (Exception ignored) {}
@@ -256,7 +261,6 @@ public class Main {
         out.flush();
     }
 
-    // ==================== Helpers ====================
     private static int findRedirectIndex(List<String> parsed) {
         for (int i = 0; i < parsed.size(); i++) {
             String s = parsed.get(i);
@@ -312,7 +316,12 @@ public class Main {
     }
 
     private static boolean isAlive(Process p) {
-        try { p.exitValue(); return false; } catch (IllegalThreadStateException e) { return true; }
+        try {
+            p.exitValue();
+            return false;
+        } catch (IllegalThreadStateException e) {
+            return true;
+        }
     }
 
     private static List<String> parseCommand(String input) {
