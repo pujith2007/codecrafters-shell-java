@@ -263,7 +263,7 @@ public class Main {
                         try {
                             leftProcess.getInputStream().transferTo(rightProcess.getOutputStream());
                             rightProcess.getOutputStream().close();
-                        } catch (Exception e) {}
+                        } catch (Exception ignored) {}
                     }).start();
 
                     if (isBackground) {
@@ -275,8 +275,8 @@ public class Main {
                         backgroundJobs.add(job);
                         System.out.println("[" + job.jobId + "] " + job.pid);
                     } else {
-                        leftProcess.waitFor();
-                        rightProcess.waitFor();
+                        leftProcess.onExit().join();
+                        rightProcess.onExit().join();
                     }
                     continue;
                 }
