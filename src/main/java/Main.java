@@ -53,22 +53,41 @@ public class Main {
 
             String rawCommandString = String.join(" ", rawArgsList);
 
-            // --- PIPELINE DETECTION ENGINE ---
-            int pipeIndex = -1;
-            for (int i = 0; i < rawArgsList.size(); i++) {
-                if (rawArgsList.get(i).equals("|")) {
-                    pipeIndex = i;
+            // --- MULTI-STAGE PIPELINE DETECTION ENGINE ---
+            boolean hasPipe = false;
+            for (String arg : rawArgsList) {
+                if (arg.equals("|")) {
+                    hasPipe = true;
                     break;
                 }
             }
 
-            if (pipeIndex != -1) {
-                List<String> leftRaw = new ArrayList<>(rawArgsList.subList(0, pipeIndex));
-                List<String> rightRaw = new ArrayList<>(rawArgsList.subList(pipeIndex + 1, rawArgsList.size()));
+            if (hasPipe) {
+                // Break tokens list down into a series of sub-lists separated by "|"
+                List<List<String>> stagesRaw = new ArrayList<>();
+                List<String> currentStage = new ArrayList<>();
                 
-                handlePipelineExecution(leftRaw, rightRaw, isBackgroundJob, rawCommandString);
+                for (String arg : rawArgsList) {
+                    if (arg.equals("|")) {
+                        stagesRaw.add(currentStage);
+                        currentStage = new ArrayList<>();
+                    } else {
+                        currentStage.add(arg);
+                    }
+                }
+                stagesRaw.add(currentStage);
+
+                handleMultiStagePipeline(stagesRaw, isBackgroundJob, rawCommandString);
                 
-                if (!leftRaw.get(0).equals("jobs") && !rightRaw.get(0).equals("jobs")) {
+                // Skip pre-prompt reap execution hooks if the pipeline contains jobs checks
+                boolean checksJobs = false;
+                for (List<String> stage : stagesRaw) {
+                    if (!stage.isEmpty() && stage.get(0).equals("jobs")) {
+                        checksJobs = true;
+                        break;
+                    }
+                }
+                if (!checksJobs) {
                     reapJobsEngine(false);
                 }
                 continue;
@@ -185,7 +204,6 @@ public class Main {
                 ProcessBuilder processBuilder = new ProcessBuilder(argsList);
                 processBuilder.directory(new File(System.getProperty("user.dir")));
                 
-                // FIX: Dynamically handle standard output redirection settings for child processes
                 if (redirectFile != null) {
                     File file = Paths.get(System.getProperty("user.dir")).resolve(redirectFile).toFile();
                     processBuilder.redirectOutput(appendMode ? ProcessBuilder.Redirect.appendTo(file) : ProcessBuilder.Redirect.to(file));
@@ -193,7 +211,6 @@ public class Main {
                     processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                 }
 
-                // FIX: Dynamically handle standard error redirection settings for child processes
                 if (redirectErrFile != null) {
                     File file = Paths.get(System.getProperty("user.dir")).resolve(redirectErrFile).toFile();
                     processBuilder.redirectError(appendErrMode ? ProcessBuilder.Redirect.appendTo(file) : ProcessBuilder.Redirect.to(file));
@@ -261,62 +278,67 @@ public class Main {
         return processedArgs;
     }
 
-    private static void handlePipelineExecution(List<String> leftRaw, List<String> rightRaw, boolean isBackground, String rawCmdStr) {
-        List<String> leftArgs = transformArgsForPipeline(leftRaw);
-        String leftRedirectErrFile = null;
-        boolean leftAppendErr = false;
-        
-        for (int i = 0; i < leftRaw.size(); i++) {
-            String arg = leftRaw.get(i);
-            if (arg.equals("2>")) { leftRedirectErrFile = leftRaw.get(++i); leftAppendErr = false; }
-            else if (arg.equals("2>>")) { leftRedirectErrFile = leftRaw.get(++i); leftAppendErr = true; }
-        }
+    /**
+     * Handles pipelines containing 2, 3, or an arbitrary number of linked stages.
+     */
+    private static void handleMultiStagePipeline(List<List<String>> stagesRaw, boolean isBackground, String rawCmdStr) {
+        List<ProcessBuilder> builders = new ArrayList<>();
 
-        List<String> rightArgs = transformArgsForPipeline(rightRaw);
-        String rightRedirectFile = null, rightRedirectErrFile = null;
-        boolean rightAppend = false, rightAppendErr = false;
-        
-        for (int i = 0; i < rightRaw.size(); i++) {
-            String arg = rightRaw.get(i);
-            if (arg.equals(">") || arg.equals("1>")) { rightRedirectFile = rightRaw.get(++i); rightAppend = false; }
-            else if (arg.equals(">>") || arg.equals("1>>")) { rightRedirectFile = rightRaw.get(++i); rightAppend = true; }
-            else if (arg.equals("2>")) { rightRedirectErrFile = rightRaw.get(++i); rightAppendErr = false; }
-            else if (arg.equals("2>>")) { rightRedirectErrFile = rightRaw.get(++i); rightAppendErr = true; }
+        for (int i = 0; i < stagesRaw.size(); i++) {
+            List<String> stageTokens = stagesRaw.get(i);
+            List<String> stageArgs = transformArgsForPipeline(stageTokens);
+
+            ProcessBuilder pb = new ProcessBuilder(stageArgs);
+            pb.directory(new File(System.getProperty("user.dir")));
+
+            // Configure pipeline head (left boundary input parameters)
+            if (i == 0) {
+                pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+            }
+
+            // Configure pipeline tail (right boundary file redirection captures)
+            if (i == stagesRaw.size() - 1) {
+                String rightRedirectFile = null;
+                boolean rightAppend = false;
+                
+                for (int j = 0; j < stageTokens.size(); j++) {
+                    String arg = stageTokens.get(j);
+                    if (arg.equals(">") || arg.equals("1>")) { rightRedirectFile = stageTokens.get(++j); rightAppend = false; }
+                    else if (arg.equals(">>") || arg.equals("1>>")) { rightRedirectFile = stageTokens.get(++j); rightAppend = true; }
+                }
+
+                if (rightRedirectFile != null) {
+                    File file = Paths.get(System.getProperty("user.dir")).resolve(rightRedirectFile).toFile();
+                    pb.redirectOutput(rightAppend ? ProcessBuilder.Redirect.appendTo(file) : ProcessBuilder.Redirect.to(file));
+                } else {
+                    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                }
+            }
+
+            // Configure standard error file captures globally per pipeline stage
+            String redirectErrFile = null;
+            boolean appendErrMode = false;
+            for (int j = 0; j < stageTokens.size(); j++) {
+                String arg = stageTokens.get(j);
+                if (arg.equals("2>")) { redirectErrFile = stageTokens.get(++j); appendErrMode = false; }
+                else if (arg.equals("2>>")) { redirectErrFile = stageTokens.get(++j); appendErrMode = true; }
+            }
+
+            if (redirectErrFile != null) {
+                File file = Paths.get(System.getProperty("user.dir")).resolve(redirectErrFile).toFile();
+                pb.redirectError(appendErrMode ? ProcessBuilder.Redirect.appendTo(file) : ProcessBuilder.Redirect.to(file));
+            } else {
+                pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+            }
+
+            builders.add(pb);
         }
 
         try {
-            ProcessBuilder pb1 = new ProcessBuilder(leftArgs);
-            pb1.directory(new File(System.getProperty("user.dir")));
-            pb1.redirectInput(ProcessBuilder.Redirect.INHERIT);
-            
-            if (leftRedirectErrFile != null) {
-                File file = Paths.get(System.getProperty("user.dir")).resolve(leftRedirectErrFile).toFile();
-                pb1.redirectError(leftAppendErr ? ProcessBuilder.Redirect.appendTo(file) : ProcessBuilder.Redirect.to(file));
-            } else {
-                pb1.redirectError(ProcessBuilder.Redirect.INHERIT);
-            }
-
-            ProcessBuilder pb2 = new ProcessBuilder(rightArgs);
-            pb2.directory(new File(System.getProperty("user.dir")));
-            
-            if (rightRedirectFile != null) {
-                File file = Paths.get(System.getProperty("user.dir")).resolve(rightRedirectFile).toFile();
-                pb2.redirectOutput(rightAppend ? ProcessBuilder.Redirect.appendTo(file) : ProcessBuilder.Redirect.to(file));
-            } else {
-                pb2.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-            }
-
-            if (rightRedirectErrFile != null) {
-                File file = Paths.get(System.getProperty("user.dir")).resolve(rightRedirectErrFile).toFile();
-                pb2.redirectError(rightAppendErr ? ProcessBuilder.Redirect.appendTo(file) : ProcessBuilder.Redirect.to(file));
-            } else {
-                pb2.redirectError(ProcessBuilder.Redirect.INHERIT);
-            }
-
-            List<ProcessBuilder> builders = List.of(pb1, pb2);
+            // Fork and wire all process pipes concurrently via dynamic pipeline architecture
             List<Process> processes = ProcessBuilder.startPipeline(builders);
             Process lastProcess = processes.get(processes.size() - 1);
-            
+
             if (!isBackground) {
                 for (Process p : processes) {
                     p.waitFor();
